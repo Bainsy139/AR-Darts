@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AR Darts — Game Picker</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/style.css') }}"
+    />
+    <style>
+      /* --- Global layout --- */
+      body {
+        --bg1: #000510;
+        --bg2: #001829;
+        --bg3: #001626;
+        background: radial-gradient(
+            1200px 800px at 30% 20%,
+            rgba(0, 198, 255, 0.2),
+            transparent 60%
+          ),
+          radial-gradient(
+            1000px 700px at 70% 80%,
+            rgba(0, 114, 255, 0.18),
+            transparent 60%
+          ),
+          linear-gradient(120deg, var(--bg1), var(--bg2), var(--bg3));
+        background-size: 200% 200%, 200% 200%, 200% 200%;
+        animation: bg-pan 18s ease-in-out infinite alternate;
+        color: #f0f0f0;
+        margin: 0;
+        font-family: "SF Pro Display", -apple-system, BlinkMacSystemFont,
+          "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+      }
+
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 24px 40px;
+        background: rgba(20, 20, 20, 0.8);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(12px);
+      }
+
+      header h1 {
+        font-size: 1.6rem;
+        font-weight: 600;
+        margin: 0;
+        letter-spacing: 0.5px;
+        color: #00e5ff;
+        text-shadow: 0 0 8px rgba(0, 229, 255, 0.45),
+          0 0 24px rgba(0, 229, 255, 0.25);
+        animation: neon-flicker 6s linear infinite;
+        position: relative;
+      }
+      header h1::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        bottom: -8px;
+        width: 52px;
+        height: 3px;
+        border-radius: 3px;
+        background: linear-gradient(90deg, #00e5ff, rgba(0, 229, 255, 0));
+        box-shadow: 0 0 10px rgba(0, 229, 255, 0.7);
+      }
+
+      .btn {
+        background: linear-gradient(135deg, #00c6ff 0%, #0072ff 100%);
+        border: none;
+        border-radius: 10px;
+        padding: 10px 18px;
+        color: #fff;
+        font-weight: 700;
+        font-size: 0.95rem;
+        text-decoration: none;
+        transition: transform 0.15s ease, box-shadow 0.15s ease,
+          filter 0.2s ease;
+        box-shadow: 0 0 0 rgba(0, 198, 255, 0);
+      }
+      .btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 0 14px rgba(0, 198, 255, 0.55),
+          0 0 28px rgba(0, 114, 255, 0.35);
+        filter: saturate(1.1);
+      }
+
+      main {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 60px 20px;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+        gap: 28px;
+        width: 100%;
+        max-width: 1100px;
+      }
+
+      .card {
+        position: relative;
+        background: linear-gradient(160deg, #121212 0%, #1b1b1b 100%);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 16px;
+        padding: 24px 20px 32px;
+        color: #fff;
+        text-decoration: none;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.55);
+        transition: transform 0.22s ease, box-shadow 0.22s ease,
+          border-color 0.22s ease;
+        overflow: hidden;
+      }
+      .card::after {
+        /* neon rim glow */
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        pointer-events: none;
+        box-shadow: 0 0 0 0 rgba(0, 229, 255, 0), 0 0 0 0 rgba(0, 114, 255, 0);
+        animation: glow-pulse 3.6s ease-in-out infinite;
+      }
+      .card::before {
+        /* sheen sweep on hover */
+        content: "";
+        position: absolute;
+        top: -30%;
+        left: -60%;
+        width: 60%;
+        height: 160%;
+        background: linear-gradient(
+          60deg,
+          rgba(255, 255, 255, 0),
+          rgba(255, 255, 255, 0.12),
+          rgba(255, 255, 255, 0)
+        );
+        transform: skewX(-18deg) translateX(-120%);
+        transition: transform 0.6s ease;
+        filter: blur(0.2px);
+      }
+      .card:hover::before {
+        transform: skewX(-18deg) translateX(280%);
+      }
+      .card:hover {
+        transform: translateY(-4px) scale(1.01);
+        border-color: rgba(0, 229, 255, 0.35);
+        box-shadow: 0 10px 30px rgba(0, 114, 255, 0.25);
+      }
+
+      .card h2 {
+        font-size: 1.25rem;
+        margin: 0 0 6px;
+        color: #00c6ff;
+      }
+
+      .card p {
+        font-size: 0.95rem;
+        opacity: 0.85;
+        margin: 0;
+      }
+
+      .pill {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        padding: 4px 10px;
+        border-radius: 999px;
+        background: rgba(0, 198, 255, 0.08);
+        border: 1px solid rgba(0, 198, 255, 0.35);
+        font-size: 0.8rem;
+        color: #8eeaff;
+        letter-spacing: 0.3px;
+        box-shadow: 0 0 12px rgba(0, 229, 255, 0.25);
+        animation: soft-pulse 3.8s ease-in-out infinite;
+      }
+
+      .coming {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      footer {
+        text-align: center;
+        padding: 20px 0 30px;
+        font-size: 0.9rem;
+        opacity: 0.7;
+        color: #ccc;
+      }
+      footer strong {
+        color: #00c6ff;
+      }
+      /* --- Animations --- */
+      @keyframes bg-pan {
+        0% {
+          background-position: 0% 0%, 100% 100%, 0% 0%;
+        }
+        50% {
+          background-position: 50% 50%, 50% 50%, 50% 50%;
+        }
+        100% {
+          background-position: 100% 100%, 0% 0%, 100% 100%;
+        }
+      }
+      @keyframes neon-flicker {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        48% {
+          opacity: 0.97;
+        }
+        50% {
+          opacity: 0.92;
+        }
+        52% {
+          opacity: 0.99;
+        }
+        70% {
+          opacity: 0.96;
+        }
+      }
+      @keyframes glow-pulse {
+        0%,
+        100% {
+          box-shadow: 0 0 0 0 rgba(0, 229, 255, 0), 0 0 0 0 rgba(0, 114, 255, 0);
+        }
+        50% {
+          box-shadow: 0 0 18px 2px rgba(0, 229, 255, 0.18),
+            0 0 36px 8px rgba(0, 114, 255, 0.12);
+        }
+      }
+      @keyframes soft-pulse {
+        0%,
+        100% {
+          transform: translateZ(0) scale(1);
+        }
+        50% {
+          transform: translateZ(0) scale(1.03);
+        }
+      }
+
+      /* Respect reduced motion */
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation: none !important;
+          transition: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>AR Darts — Game Selection</h1>
+      <a class="btn" href="/play/around">Projector View</a>
+    </header>
+
+    <main>
+      <section class="grid">
+        <a class="card" href="/play/around">
+          <span class="pill">Classic</span>
+          <h2>Around the World</h2>
+          <p>Hit 1→20 then Bull. Doubles skip 1, trebles skip 2.</p>
+        </a>
+
+        <a class="card" href="/play/x01?start=501&double_out=1">
+          <span class="pill">x01</span>
+          <h2>501 (Double-out)</h2>
+          <p>
+            Score down to exactly 0. Finish on a double (inner bull counts).
+          </p>
+        </a>
+
+        <a class="card" href="/play/x01?start=301&double_out=1">
+          <span class="pill">x01</span>
+          <h2>301 (Double-out)</h2>
+          <p>Shorter x01 game. Same double-out finish.</p>
+        </a>
+
+        <a class="card" href="/play/x01?start=701&double_out=1">
+          <span class="pill">x01</span>
+          <h2>701 (Double-out)</h2>
+          <p>Longer x01 game for teams or practice sessions.</p>
+        </a>
+
+        <div class="card coming" title="Coming soon">
+          <span class="pill">Coming Soon</span>
+          <h2>Cricket</h2>
+          <p>Close 15–20 and Bull. Score on your marks.</p>
+        </div>
+
+        <div class="card coming" title="Coming soon">
+          <span class="pill">Coming Soon</span>
+          <h2>Killer</h2>
+          <p>Get a number, hit doubles to arm, then knock out others.</p>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      Open this page on a tablet to choose a game, then switch the projector to
+      <strong>Projector View</strong>.
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,381 @@
+body {
+  background-color: #111;
+  color: white;
+  text-align: center;
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+}
+
+/* --- Global 3:2 stage sizing (always preserve ratio) --- */
+:root {
+  /* default: width-constrained */
+  --stage-w: min(96vw, 1500px);
+  --stage-h: calc(var(--stage-w) * 2 / 3);
+}
+/* if the viewport is WIDER than 3:2, constrain by height instead */
+@media (min-aspect-ratio: 3/2) {
+  :root {
+    --stage-h: min(90vh, 900px);
+    --stage-w: calc(var(--stage-h) * 3 / 2);
+  }
+}
+
+#board-container {
+  position: relative;
+  width: var(--stage-w);
+  height: var(--stage-h);
+  background: #222;
+  border: 2px solid #444;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  margin: 0 auto;
+}
+
+#dartboard {
+  width: 30%;
+  height: auto;
+  user-select: none;
+  pointer-events: none; /* clicks go to overlay */
+}
+
+#overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  z-index: 2;
+}
+
+#hud {
+  font-size: 0.95rem;
+  opacity: 0.9;
+}
+
+/* Quick utilities */
+.hidden {
+  display: none !important;
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid #333;
+  background: #222;
+  color: #eee;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, opacity 120ms ease;
+}
+.btn:hover {
+  background: #262626;
+  border-color: #3a3a3a;
+}
+.btn:active {
+  opacity: 0.85;
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: #333;
+}
+.btn-ghost:hover {
+  background: #1a1a1a;
+}
+
+/* ===== HUD layout & controls ===== */
+.hud {
+  max-width: 1000px;
+  width: var(--stage-w);
+  margin: 0 auto 24px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+.hud-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 6px 0;
+}
+.hud-cell {
+  background: #222;
+  border: 1px solid #333;
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+.hud-actions button {
+  background: #2b8a3e; /* primary action */
+  border: none;
+  color: #fff;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.hud-actions #btn-undo {
+  background: #444;
+}
+.hud-actions #btn-reset {
+  background: #8a2b2b;
+}
+.hud-actions #btn-start {
+  background: #2b8a3e;
+}
+.hud-actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+#status {
+  color: #cdeafc;
+}
+
+.hit-log {
+  max-height: 96px;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  background: #111;
+  border: 1px dashed #333;
+  border-radius: 6px;
+  padding: 6px 8px;
+  flex: 1 1 100%;
+}
+
+/* Inputs (shared look for the calibration panel too) */
+input[type="number"],
+input[type="text"] {
+  background: #111;
+  color: #eee;
+  border: 1px solid #444;
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+input[type="range"] {
+  accent-color: #e09f2b;
+}
+
+/* Small screens: keep margins tight */
+@media (max-width: 640px) {
+  .hud {
+    padding: 10px 12px;
+  }
+  .hud-actions button {
+    padding: 7px 12px;
+  }
+}
+
+/* ===================== Side HUD panels for projection ===================== */
+/* Panels sit inside the 3:2 board container and do not block clicks */
+.hud-side {
+  position: absolute;
+  top: 4%;
+  width: 22%;
+  height: 92%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none; /* let dart clicks pass through */
+  z-index: 3; /* above overlay text, below calibration controls */
+}
+.hud-side.left {
+  left: 0;
+}
+.hud-side.right {
+  right: 0;
+}
+
+/* Neon glass card */
+.hud-side .card {
+  width: 95%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: linear-gradient(
+    180deg,
+    rgba(10, 12, 18, 0.6),
+    rgba(10, 12, 18, 0.38)
+  );
+  border: 1px solid rgba(0, 255, 255, 0.22);
+  box-shadow: 0 0 24px rgba(0, 255, 255, 0.12) inset,
+    0 6px 18px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(2.5px);
+  -webkit-backdrop-filter: blur(2.5px);
+  color: #dff8ff;
+  text-shadow: 0 0 6px rgba(0, 255, 255, 0.25);
+  pointer-events: none;
+}
+
+/* Typography */
+.hud-side .p-name {
+  font-size: clamp(1.2rem, 1.8vw, 2rem);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  margin: 0 0 6px 0;
+}
+.hud-side .p-line {
+  font-size: clamp(1rem, 1.4vw, 1.6rem);
+  line-height: 1.25;
+  opacity: 0.95;
+  margin: 6px 0;
+}
+.hud-side .label {
+  opacity: 0.75;
+  margin-right: 6px;
+}
+
+/* Active player glow */
+.hud-side .card.active {
+  outline: 2px solid rgba(0, 255, 180, 0.55);
+  box-shadow: 0 0 24px rgba(0, 255, 180, 0.25) inset,
+    0 0 28px rgba(0, 255, 180, 0.22);
+}
+
+/* Subtle pulse to draw the eye when it's your turn */
+@keyframes hudPulse {
+  0% {
+    box-shadow: 0 0 20px rgba(0, 255, 180, 0.18),
+      0 0 6px rgba(0, 255, 180, 0.25) inset;
+  }
+  50% {
+    box-shadow: 0 0 28px rgba(0, 255, 180, 0.28),
+      0 0 12px rgba(0, 255, 180, 0.33) inset;
+  }
+  100% {
+    box-shadow: 0 0 20px rgba(0, 255, 180, 0.18),
+      0 0 6px rgba(0, 255, 180, 0.25) inset;
+  }
+}
+.hud-side .card.active {
+  animation: hudPulse 1.8s ease-in-out infinite;
+}
+
+/* Projector-friendly scaling (very large canvases) */
+@media (min-width: 1200px) {
+  .hud-side .p-name {
+    font-size: clamp(1.6rem, 1.9vw, 2.4rem);
+  }
+  .hud-side .p-line {
+    font-size: clamp(1.2rem, 1.6vw, 1.9rem);
+  }
+}
+
+/* Narrow screens: tuck the panels closer and shrink text slightly */
+@media (max-width: 900px) {
+  .hud-side {
+    width: 24%;
+    top: 3%;
+    height: 94%;
+  }
+  .hud-side .p-name {
+    font-size: clamp(1.1rem, 1.9vw, 1.6rem);
+  }
+  .hud-side .p-line {
+    font-size: clamp(0.95rem, 1.5vw, 1.3rem);
+  }
+}
+
+/* ===================== Projection polish: hide bottom info, keep controls ===================== */
+/* On wider screens we rely on the side HUDs for info; keep only the control buttons visible. */
+@media (min-width: 900px) {
+  /* Hide informational cells in the bottom HUD, but keep the actions row visible */
+  .hud .hud-cell {
+    display: none;
+  }
+  .hud .hud-actions {
+    display: flex;
+  }
+}
+
+/* Respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .hud-side .card.active {
+    animation: none;
+  }
+}
+
+/* Hide bottom status text on wide screens; side HUDs carry status */
+@media (min-width: 900px) {
+  #status {
+    display: none;
+  }
+}
+/* ===== Clear active turn indication (bold) ===== */
+.hud-side .card {
+  transform-origin: center;
+  opacity: 0.85;
+  transition: transform 220ms ease, box-shadow 220ms ease,
+    outline-color 220ms ease, opacity 220ms ease, filter 220ms ease;
+}
+.hud-side .card.active {
+  transform: scale(1.18); /* much bigger so it's obvious */
+  opacity: 1;
+  z-index: 4;
+  outline: 2px solid rgba(0, 255, 180, 0.75);
+  box-shadow: 0 0 34px rgba(0, 255, 180, 0.35) inset,
+    0 0 48px rgba(0, 255, 180, 0.35);
+}
+.hud-side .card.inactive {
+  opacity: 0.28; /* clearly dim */
+  filter: saturate(0.5) brightness(0.8);
+}
+/* Subtle emphasis on active text */
+.hud-side .card.active .p-name {
+  color: #ffffff;
+  text-shadow: 0 0 10px rgba(0, 255, 200, 0.35);
+}
+.hud-side .card.inactive .p-name {
+  color: #b7d6db;
+}
+.hud-side .card.inactive .p-line {
+  opacity: 0.6;
+}
+
+/* TEMP: de-emphasize Throws line; will remove later */
+#p1-throws,
+#p2-throws {
+  opacity: 0.55;
+}
+
+/* ===== Turn badge (top-center) ===== */
+.turn-badge {
+  position: absolute;
+  top: 1.5%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(10, 12, 18, 0.55);
+  border: 1px solid rgba(0, 255, 255, 0.25);
+  color: #dff8ff;
+  font-size: clamp(1rem, 1.4vw, 1.6rem);
+  letter-spacing: 0.02em;
+  text-shadow: 0 0 6px rgba(0, 255, 255, 0.3);
+  pointer-events: none;
+  z-index: 5; /* above HUD cards */
+}
+
+/* Stronger turn emphasis */
+.hud-side .card.active {
+  transform: scale(1.22);
+}
+.hud-side .card.inactive {
+  opacity: 0.22;
+}
