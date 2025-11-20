@@ -119,7 +119,7 @@ let game = {
 let BOARD_RADIUS_FUDGE = 0.92;
 let CENTER_X_FUDGE = 0;
 let CENTER_Y_FUDGE = 0;
-let ROT_OFFSET_DEG = 0;
+let ROT_OFFSET_DEG = 2;
 // Initial visibility of guides / panel from storage
 let SHOW_CAL_PANEL = loadCalUi();
 // Apply any saved calibration
@@ -135,7 +135,7 @@ let SHOW_CAL_PANEL = loadCalUi();
 let SHOW_GUIDES = true; // controlled by checkbox in UI
 const RATIOS = {
   outer: 1.0,
-  doubleInner: 0.94,
+  doubleInner: 0.95,
   tripleOuter: 0.63,
   tripleInner: 0.57,
   bullOuter: 0.09,
@@ -254,9 +254,9 @@ function drawFade() {
 function ringFromRadiusFrac(r) {
   if (r <= 0.05) return "inner_bull";
   if (r <= 0.12) return "outer_bull";
-  if (r >= 0.85 && r <= 0.95) return "double";
-  if (r >= 0.5 && r <= 0.6) return "treble";
-  if (r > 1.02) return "miss";
+  if (r >= 0.94 && r <= 1.0) return "double";
+  if (r >= 0.57 && r <= 0.65) return "treble";
+  if (r > 1.0) return "miss";
   return "single";
 }
 

@@ -30,7 +30,7 @@ body {
   width: var(--stage-w);
   height: var(--stage-h);
   background: #222;
-  border: 2px solid #444;
+  border: 2px solid #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -39,10 +39,11 @@ body {
 }
 
 #dartboard {
-  width: 30%;
+  width: 31.4%;
   height: auto;
   user-select: none;
   pointer-events: none; /* clicks go to overlay */
+  opacity: 1.51;
 }
 
 #overlay {
@@ -153,7 +154,7 @@ body {
   overflow: auto;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
     "Liberation Mono", "Courier New", monospace;
-  background: #111;
+  background: #ff0cdb;
   border: 1px dashed #333;
   border-radius: 6px;
   padding: 6px 8px;
@@ -210,11 +211,11 @@ input[type="range"] {
   border-radius: 12px;
   background: linear-gradient(
     180deg,
-    rgba(10, 12, 18, 0.6),
+    rgba(34, 89, 255, 0.6),
     rgba(10, 12, 18, 0.38)
   );
   border: 1px solid rgba(0, 255, 255, 0.22);
-  box-shadow: 0 0 24px rgba(0, 255, 255, 0.12) inset,
+  box-shadow: 0 0 24px rgb(254, 21, 246) inset,
     0 6px 18px rgba(0, 0, 0, 0.35);
   backdrop-filter: blur(2.5px);
   -webkit-backdrop-filter: blur(2.5px);
