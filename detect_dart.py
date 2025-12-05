@@ -18,17 +18,32 @@ ROT_OFFSET_DEG = -18.0
 
 # Rough ring ratios – we’ll refine later
 def ring_from_radius_frac(r_frac: float) -> str:
-    if r_frac <= 0.05:
+    # Inner bull (0 – 0.035)
+    if r_frac <= 0.035:
         return "inner_bull"
-    if r_frac <= 0.12:
+
+    # Outer bull (0.035 – 0.09)
+    if r_frac <= 0.09:
         return "outer_bull"
-    if 0.85 <= r_frac <= 0.95:
-        return "double"
-    if 0.5 <= r_frac <= 0.6:
+
+    # Single (inner segment) up to start of treble
+    if r_frac < 0.57:
+        return "single"
+
+    # Treble (0.57 – 0.63)
+    if r_frac <= 0.63:
         return "treble"
-    if r_frac > 1.02:
-        return "miss"
-    return "single"
+
+    # Single (outer segment) up to inner double
+    if r_frac < 0.95:
+        return "single"
+
+    # Double (0.95 – 1.0)
+    if r_frac <= 1.0:
+        return "double"
+
+    # Beyond board = miss
+    return "miss"
 
 # Sector order (clockwise from 20 at 12 o'clock)
 SECTORS = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17,
