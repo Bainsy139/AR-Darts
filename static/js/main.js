@@ -469,6 +469,101 @@ async function logToServer(payload) {
 }
 
 // -------------------------------------------------------------------------------------------------
+// Camera endpoints and detection helpers
+// -------------------------------------------------------------------------------------------------
+async function captureBoardBefore() {
+  try {
+    const res = await fetch("/capture-before", { method: "POST" });
+    const data = await res.json();
+    if (!data.ok) throw new Error("capture failed");
+    if (statusEl) {
+      statusEl.textContent =
+        "Board captured. Throw a dart, then press Detect Dart.";
+    }
+  } catch (e) {
+    console.warn("capture-before failed:", e);
+    if (statusEl) {
+      statusEl.textContent = "Capture failed – check Pi logs.";
+    }
+  }
+}
+
+function normaliseDetectionHit(hit) {
+  if (!hit) return { ring: "miss", sector: null };
+  const t = hit.type;
+  if (t === "inner_bull" || t === "outer_bull") {
+    // Sector is unused for bulls in our scoring, but keep it sane
+    return { ring: t, sector: 25 };
+  }
+  if (t === "miss" || hit.sector == null) {
+    return { ring: "miss", sector: null };
+  }
+  return { ring: t, sector: hit.sector };
+}
+
+async function detectDartFromCamera() {
+  try {
+    const res = await fetch("/detect", { method: "POST" });
+    const data = await res.json();
+    if (!data.ok) {
+      throw new Error("detect endpoint returned !ok");
+    }
+    if (!data.hit) {
+      if (statusEl) {
+        statusEl.textContent = "No impact detected.";
+        setLastHitText("No impact detected");
+      }
+      return;
+    }
+
+    const { ring, sector } = normaliseDetectionHit(data.hit);
+
+    if (ring === "miss") {
+      if (statusEl) {
+        statusEl.textContent = "Detected: miss";
+        setLastHitText("Miss");
+      }
+      return;
+    }
+
+    // Auto-start game if not already active
+    if (!game.active) {
+      startGame();
+    }
+
+    // Ensure audio is ready
+    unmuteSfx();
+    ensureAudio();
+
+    const label = ring.includes("bull")
+      ? ring.replace("_", " ")
+      : `${ring} ${sector}`;
+
+    if (statusEl) {
+      statusEl.textContent = `Detected: ${label}`;
+      setLastHitText(statusEl.textContent);
+    }
+
+    // Feed the detected hit into the engine
+    applyHit(ring, sector);
+
+    // Optionally log this to the server as well
+    logToServer({
+      source: "camera",
+      ring,
+      sector,
+      cx: data.hit.x,
+      cy: data.hit.y,
+    });
+  } catch (e) {
+    console.warn("detect failed:", e);
+    if (statusEl) {
+      statusEl.textContent = "Detect failed – check Pi logs.";
+    }
+  }
+}
+
+// -------------------------------------------------------------------------------------------------
 // MODEL LAYER: GameEngine + Modes
 // -------------------------------------------------------------------------------------------------
 class GameEngine {
@@ -1065,9 +1160,19 @@ window.addEventListener("DOMContentLoaded", () => {
   const s = document.getElementById("btn-start");
   const r = document.getElementById("btn-reset");
   const u = document.getElementById("btn-undo");
+  const c = document.getElementById("btn-capture");
+  const d = document.getElementById("btn-detect");
   if (s) s.addEventListener("click", startGame);
   if (r) r.addEventListener("click", resetGame);
   if (u) u.addEventListener("click", undo);
+  if (c)
+    c.addEventListener("click", () => {
+      captureBoardBefore();
+    });
+  if (d)
+    d.addEventListener("click", () => {
+      detectDartFromCamera();
+    });
   ENGINE.setMode(game.mode); // reflect boot mode before Start
   renderPlayers();
 });
