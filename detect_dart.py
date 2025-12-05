@@ -39,7 +39,7 @@ CAMERA_UPSIDE_DOWN = True
 
 # Threshold tuning
 DIFF_BLUR_KSIZE = 9
-DIFF_THRESHOLD = 40
+DIFF_THRESHOLD = 25
 MIN_BLOB_AREA = 30
 
 
@@ -64,9 +64,15 @@ def pixel_to_polar(x: float, y: float):
 
 def classify_hit(x: float, y: float):
     r_frac, angle = pixel_to_polar(x, y)
+
+    # DEBUG: print raw polar values so we can calibrate rings/rotation later
+    angle_deg = math.degrees(angle)
+    print(f"[DEBUG] r_frac={r_frac:.3f}, angle_deg={angle_deg:.1f}")
+
     ring = ring_from_radius_frac(r_frac)
     if ring == "miss":
         return ring, None
+
     sec_idx = sector_index_from_angle(angle)
     sector_num = SECTORS[sec_idx]
     return ring, sector_num
@@ -88,13 +94,14 @@ def preprocess_for_diff(img):
 
 
 def find_dart_center(before_img, after_img):
-    g1 = preprocess_for_diff(before_img)
-    g2 = preprocess_for_diff(after_img)
+    g_before = preprocess_for_diff(before_img)
+    g_after = preprocess_for_diff(after_img)
 
-    diff = cv2.absdiff(g2, g1)
-    diff_inv = cv2.bitwise_not(diff)
+    # Highlight areas that became darker in the AFTER frame
+    # (dart hole / shadow should be darker than bare board)
+    delta = cv2.subtract(g_before, g_after)
 
-    _, mask = cv2.threshold(diff_inv, DIFF_THRESHOLD, 255, cv2.THRESH_BINARY)
+    _, mask = cv2.threshold(delta, DIFF_THRESHOLD, 255, cv2.THRESH_BINARY)
 
     kernel = np.ones((3, 3), np.uint8)
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
