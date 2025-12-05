@@ -14,7 +14,7 @@ BOARD_CY = 540
 BOARD_RADIUS = 520  # pixels from centre to outer board edge
 
 # Rotation offset in degrees to align sector 20 to the top
-ROT_OFFSET_DEG = 0.0
+ROT_OFFSET_DEG = 18.0
 
 # Rough ring ratios – we’ll refine later
 def ring_from_radius_frac(r_frac: float) -> str:
