@@ -1,5 +1,7 @@
 from flask import Flask, render_template, request, jsonify
 import subprocess
+import os
+import shutil
 import detect_dart  # uses your existing detection logic
 
 app = Flask(__name__)
@@ -64,10 +66,33 @@ def capture_before():
 
 @app.post('/detect')
 def detect():
+    """Capture an AFTER frame, compare against a rolling baseline, and return hit JSON.
+
+    Behaviour:
+      - If BEFORE_PATH (baseline) does not exist yet, capture a warm-up frame
+        and return a no_impact response. This establishes the baseline.
+      - On subsequent calls, use BEFORE_PATH as the baseline, capture AFTER_PATH
+        as the new frame, and run detect_dart.detect_impact(before, after).
+      - When a valid hit is found, update BEFORE_PATH to the latest AFTER_PATH
+        so multiple darts can accumulate on the board.
     """
-    Capture an AFTER frame (with dart), run detection against BEFORE_PATH,
-    and return the classified hit as JSON.
-    """
+    # 0) Ensure we have a baseline; if not, capture one and return a warm-up response.
+    if not os.path.exists(BEFORE_PATH):
+        try:
+            cmd = [
+                "rpicam-still",
+                "-o", BEFORE_PATH,
+                "-t", "1000",
+                "--width", "1920",
+                "--height", "1080",
+            ]
+            subprocess.run(cmd, check=True)
+            print("[DETECT] Baseline captured (warm-up).")
+            return jsonify({"ok": True, "hit": None, "reason": "baseline_captured"})
+        except subprocess.CalledProcessError as e:
+            print("ERROR capturing baseline image:", e)
+            return jsonify({"ok": False, "error": "baseline_capture_failed"}), 500
+
     # 1) Capture AFTER image
     try:
         cmd = [
@@ -82,7 +107,7 @@ def detect():
         print("ERROR capturing AFTER image:", e)
         return jsonify({"ok": False, "error": "capture_after_failed"}), 500
 
-    # 2) Run detection using your existing detect_dart.py functions
+    # 2) Load images and run high-level detection
     try:
         before = detect_dart.load_image(BEFORE_PATH)
         after = detect_dart.load_image(AFTER_PATH)
@@ -90,14 +115,26 @@ def detect():
         print("ERROR loading images:", e)
         return jsonify({"ok": False, "error": "load_failed"}), 500
 
-    center, _mask = detect_dart.find_dart_center(before, after)
+    result = detect_dart.detect_impact(before, after)
+    hit_info = result.get("hit")
+    reason = result.get("reason")
 
-    if center is None:
-        # No clear blob – treat as miss
-        return jsonify({"ok": True, "hit": None, "reason": "no_impact"})
+    if not hit_info:
+        # No clear impact or off-board; keep the existing baseline for now.
+        print(f"[DETECT] No impact detected (reason={reason}).")
+        return jsonify({"ok": True, "hit": None, "reason": reason or "no_impact"})
 
-    cx, cy = center
-    ring, sector = detect_dart.classify_hit(cx, cy)
+    # We have a valid hit; update the rolling baseline to the latest frame
+    try:
+        shutil.copy2(AFTER_PATH, BEFORE_PATH)
+        print("[DETECT] Baseline updated after valid hit.")
+    except Exception as e:
+        print("WARNING: Failed to update baseline:", e)
+
+    ring = hit_info.get("ring")
+    sector = hit_info.get("sector")
+    cx = float(hit_info.get("x", 0.0))
+    cy = float(hit_info.get("y", 0.0))
 
     # Normalise bull labels a bit for the front-end
     if ring == "inner_bull":
@@ -112,8 +149,8 @@ def detect():
     return jsonify({
         "ok": True,
         "hit": {
-            "type": hit_type,   # "single" | "double" | "treble" | "inner_bull" | "outer_bull" | "miss"
-            "sector": sector,   # 1–20 or None for bulls/miss
+            "type": hit_type,
+            "sector": sector,
             "x": cx,
             "y": cy,
         }
