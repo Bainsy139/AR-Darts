@@ -164,13 +164,6 @@
         <div class="hud-cell">Target: <span id="hud-target">1</span></div>
         <div class="hud-cell">Throws left: <span id="hud-throws">3</span></div>
       </div>
-      <div class="hud-row hud-actions">
-        <button id="btn-start" type="button">Start</button>
-        <button id="btn-capture" type="button">Capture Before</button>
-        <button id="btn-detect" type="button">Detect Dart</button>
-        <button id="btn-undo" type="button" disabled>Undo</button>
-        <button id="btn-reset" type="button">Reset</button>
-      </div>
       <div class="hud-row">
         <div id="status">Click the board to simulate a dart.</div>
       </div>
@@ -178,6 +171,33 @@
         <div id="hit-log" class="hit-log" aria-live="polite"></div>
       </div>
     </section>
+
+    <!-- Fixed control bar so buttons are always visible without scrolling -->
+    <div
+      id="hud-controls"
+      class="hud-controls"
+      style="
+        position: fixed;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: 16px;
+        z-index: 3;
+        display: flex;
+        gap: 8px;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(4px);
+        align-items: center;
+        justify-content: center;
+      "
+    >
+      <button id="btn-start" type="button">Start</button>
+      <button id="btn-capture" type="button">Capture Before</button>
+      <button id="btn-detect" type="button">Detect Dart</button>
+      <button id="btn-undo" type="button" disabled>Undo</button>
+      <button id="btn-reset" type="button">Reset</button>
+    </div>
 
     <!-- SFX (muted by default; wired in main.js) -->
     <audio id="sfx-hit" preload="auto" muted>
