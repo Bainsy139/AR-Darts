@@ -16,7 +16,7 @@ BOARD_RADIUS = 155  # pixels from centre to outer board edge
 # Rotation offset in degrees to align sector 20 to the top
 # Previously -18.0, but tests show we were off by one full wedge (18°).
 # Using 0.0 brings 20/1/5/19/15 etc into the correct sectors.
-ROT_OFFSET_DEG = 0.0
+ROT_OFFSET_DEG = 5.0
 
 # Rough ring ratios – we’ll refine later
 def ring_from_radius_frac(r_frac: float) -> str:
@@ -171,6 +171,30 @@ def find_dart_center(before_img, after_img):
             best_center = (cx, cy)
 
     return best_center, mask
+
+
+def detect_impact(before_img, after_img):
+    """High-level helper: given BEFORE and AFTER BGR images, return hit info.
+
+    Returns a dict with keys:
+      - hit: dict with ring, sector, r_frac, angle_deg, x, y
+      - reason: string if no impact ("no_impact"), else None
+    """
+    center, _ = find_dart_center(before_img, after_img)
+
+    if center is None:
+        return {"hit": None, "reason": "no_impact"}
+
+    cx, cy = center
+    info = classify_hit_with_debug(cx, cy)
+    info["x"] = cx
+    info["y"] = cy
+
+    # If it landed off the board, treat as miss
+    if info["ring"] == "miss" or info["sector"] is None:
+        return {"hit": None, "reason": "off_board"}
+
+    return {"hit": info, "reason": None}
 
 
 def main():
