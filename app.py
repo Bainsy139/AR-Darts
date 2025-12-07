@@ -81,9 +81,8 @@ def detect():
         try:
             cmd = [
                 "rpicam-still",
-                "--zsl",
                 "-o", BEFORE_PATH,
-                "-t", "1",
+                "-t", "1000",
                 "--width", "1920",
                 "--height", "1080",
             ]
@@ -98,9 +97,8 @@ def detect():
     try:
         cmd = [
             "rpicam-still",
-            "--zsl",
             "-o", AFTER_PATH,
-            "-t", "1",
+            "-t", "1000",
             "--width", "1920",
             "--height", "1080",
         ]
