@@ -77,20 +77,37 @@ def pixel_to_polar(x: float, y: float):
     return r_frac, angle
 
 
-def classify_hit(x: float, y: float):
-    r_frac, angle = pixel_to_polar(x, y)
+def classify_hit_with_debug(x: float, y: float):
+    """Classify a hit and return extra debug info for calibration.
 
-    # DEBUG: print raw polar values so we can calibrate rings/rotation later
+    Returns a dict with keys: ring, sector, r_frac, angle_deg.
+    """
+    r_frac, angle = pixel_to_polar(x, y)
     angle_deg = math.degrees(angle)
-    print(f"[DEBUG] r_frac={r_frac:.3f}, angle_deg={angle_deg:.1f}")
 
     ring = ring_from_radius_frac(r_frac)
     if ring == "miss":
-        return ring, None
+        sector = None
+    else:
+        sec_idx = sector_index_from_angle(angle)
+        sector = SECTORS[sec_idx]
 
-    sec_idx = sector_index_from_angle(angle)
-    sector_num = SECTORS[sec_idx]
-    return ring, sector_num
+    return {
+        "ring": ring,
+        "sector": sector,
+        "r_frac": r_frac,
+        "angle_deg": angle_deg,
+    }
+
+
+def classify_hit(x: float, y: float):
+    """Backwards-compatible wrapper used by the CLI script.
+
+    Prints debug info and returns (ring, sector) as before.
+    """
+    info = classify_hit_with_debug(x, y)
+    print(f"[DEBUG] r_frac={info['r_frac']:.3f}, angle_deg={info['angle_deg']:.1f}")
+    return info["ring"], info["sector"]
 
 
 def load_image(path: str):
