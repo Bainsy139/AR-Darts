@@ -10,7 +10,7 @@ import numpy as np
 # Board centre (pixels) and radius in the captured image
 # TODO: put your real numbers here once you've measured from clean_board.jpg
 BOARD_CX = 1042   # example for a 1920x1080 frame – change later
-BOARD_CY = 692
+BOARD_CY = 672
 BOARD_RADIUS = 155  # pixels from centre to outer board edge
 
 # Rotation offset in degrees to align sector 20 to the top
