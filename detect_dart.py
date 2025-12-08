@@ -197,9 +197,65 @@ def detect_impact(before_img, after_img):
     return {"hit": info, "reason": None}
 
 
+def draw_debug_overlay(input_path: str, output_path: str):
+    """
+    Debug helper: draw our current idea of the board geometry (rings + wedge lines)
+    onto a camera frame so we can visually tune BOARD_CX/BOARD_CY/BOARD_RADIUS/ROT_OFFSET_DEG.
+
+    Usage from CLI (see main):
+        python3 detect_dart.py overlay INPUT.jpg OUTPUT.jpg
+    """
+    img = load_image(input_path)
+    # Work on a copy so we don't mutate the original
+    overlay = img.copy()
+
+    # Centre as integer pixel coords
+    center = (int(round(BOARD_CX)), int(round(BOARD_CY)))
+
+    # Draw outer board edge
+    cv2.circle(overlay, center, int(round(BOARD_RADIUS)), (0, 0, 255), 2)
+
+    # Draw the main ring boundaries based on the same fractions used in ring_from_radius_frac
+    ring_fracs = [0.035, 0.09, 0.57, 0.63, 0.95]
+    for frac in ring_fracs:
+        r = int(round(BOARD_RADIUS * frac))
+        cv2.circle(overlay, center, r, (0, 255, 0), 1)
+
+    # Draw the 20 wedge boundaries using the same rotation convention as sector_index_from_angle
+    rot_rad = math.radians(ROT_OFFSET_DEG)
+    two_pi = 2.0 * math.pi
+    for k in range(20):
+        # Boundary angles are where the sector index changes; these are spaced every 18°
+        angle = -math.pi / 2 + rot_rad + (k * two_pi / 20.0)
+        x2 = int(round(BOARD_CX + BOARD_RADIUS * math.cos(angle)))
+        y2 = int(round(BOARD_CY + BOARD_RADIUS * math.sin(angle)))
+        cv2.line(overlay, center, (x2, y2), (255, 0, 0), 1)
+
+    # Mark the centre point explicitly
+    cv2.circle(overlay, center, 3, (255, 255, 255), -1)
+
+    cv2.imwrite(output_path, overlay)
+
+
 def main():
+    # Debug overlay mode:
+    #   python3 detect_dart.py overlay INPUT.jpg OUTPUT.jpg
+    if len(sys.argv) >= 2 and sys.argv[1] == "overlay":
+        if len(sys.argv) != 4:
+            print("Usage: python3 detect_dart.py overlay INPUT.jpg OUTPUT.jpg")
+            sys.exit(1)
+        input_path = sys.argv[2]
+        output_path = sys.argv[3]
+        draw_debug_overlay(input_path, output_path)
+        print(f"Overlay written to {output_path}")
+        sys.exit(0)
+
+    # Default CLI mode:
+    #   python3 detect_dart.py BEFORE.jpg AFTER.jpg
     if len(sys.argv) != 3:
-        print("Usage: python3 detect_dart.py BEFORE.jpg AFTER.jpg")
+        print("Usage:")
+        print("  python3 detect_dart.py BEFORE.jpg AFTER.jpg")
+        print("  python3 detect_dart.py overlay INPUT.jpg OUTPUT.jpg")
         sys.exit(1)
 
     before_path = sys.argv[1]
