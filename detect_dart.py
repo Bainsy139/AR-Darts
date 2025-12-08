@@ -11,7 +11,7 @@ import numpy as np
 # TODO: put your real numbers here once you've measured from clean_board.jpg
 BOARD_CX = 1042   # example for a 1920x1080 frame – change later
 BOARD_CY = 625
-BOARD_RADIUS = 170  # pixels from centre to outer board edge
+BOARD_RADIUS = 150  # pixels from centre to outer board edge
 
 # Rotation offset in degrees to align sector 20 to the top
 # Previously -18.0, but tests show we were off by one full wedge (18°).
