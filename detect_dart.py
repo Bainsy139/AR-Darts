@@ -8,10 +8,10 @@ import numpy as np
 # ------------------------------
 
 # Board centre (pixels) and radius in the captured image
-# TODO: put your real numbers here once you've measured from clean_board.jpg
-BOARD_CX = 1042   # example for a 1920x1080 frame – change later
-BOARD_CY = 625
-BOARD_RADIUS = 130  # pixels from centre to outer board edge
+# Calibrated from overlay_debug on 1920x1080 frames
+BOARD_CX = 1042   # horizontal centre of board
+BOARD_CY = 625    # vertical centre of board
+BOARD_RADIUS = 130  # pixels from centre to outer double ring edge (tweak if overlay drifts)
 
 # Rotation offset in degrees to align sector 20 to the top
 # Previously -18.0, but tests show we were off by one full wedge (18°).
@@ -53,6 +53,30 @@ SECTORS = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17,
 
 # If camera is upside-down
 CAMERA_UPSIDE_DOWN = True
+
+# Optional perspective warp to correct board foreshortening.
+# We now calibrate this from 4 points on the outer double ring.
+# Source points (from overlay_local_test.jpg, AFTER rotation):
+#   top, right, bottom, left
+USE_WARP = True
+
+SRC_POINTS = np.float32([
+    [1039, 483],   # top
+    [1195, 617],   # right
+    [1045, 738],   # bottom
+    [890,  627],   # left
+])
+
+# Target points: where those 4 points would be on a perfect circle
+# centred at (BOARD_CX, BOARD_CY) with radius BOARD_RADIUS.
+DST_POINTS = np.float32([
+    [BOARD_CX,              BOARD_CY - BOARD_RADIUS],  # top
+    [BOARD_CX + BOARD_RADIUS, BOARD_CY],               # right
+    [BOARD_CX,              BOARD_CY + BOARD_RADIUS],  # bottom
+    [BOARD_CX - BOARD_RADIUS, BOARD_CY],               # left
+])
+
+WARP_MATRIX = cv2.getPerspectiveTransform(SRC_POINTS, DST_POINTS)
 
 # Threshold tuning
 DIFF_BLUR_KSIZE = 9
@@ -116,8 +140,16 @@ def load_image(path: str):
     img = cv2.imread(path, cv2.IMREAD_COLOR)
     if img is None:
         raise RuntimeError(f"Failed to load image: {path}")
+
+    # First apply camera orientation correction.
     if CAMERA_UPSIDE_DOWN:
         img = cv2.rotate(img, cv2.ROTATE_180)
+
+    # Then optionally apply perspective warp to correct foreshortening.
+    if USE_WARP:
+        h, w = img.shape[:2]
+        img = cv2.warpPerspective(img, WARP_MATRIX, (w, h))
+
     return img
 
 
