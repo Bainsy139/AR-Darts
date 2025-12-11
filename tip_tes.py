@@ -12,14 +12,25 @@ if before is None or after is None:
     raise RuntimeError("before/after images missing")
 
 # --- 1. Compute difference mask ---
+# Boost the difference a bit so faint pixels (like the shaft) stand out more.
 diff = cv2.absdiff(before, after)
 gray = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
-_, thresh = cv2.threshold(gray, 25, 255, cv2.THRESH_BINARY)
+
+# Slight blur to connect nearby pixels along the shaft.
+gray_blur = cv2.GaussianBlur(gray, (5, 5), 0)
+
+# Lower threshold so we keep more of the subtle changes.
+_, thresh = cv2.threshold(gray_blur, 10, 255, cv2.THRESH_BINARY)
 
 # --- 2. Morphological cleanup ---
-# Use a smaller kernel so we keep the thin dart shaft in the mask.
-kernel = np.ones((3, 3), np.uint8)
-mask = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
+# First close small gaps (to join broken shaft pixels), then open to remove isolated noise.
+kernel_close = np.ones((5, 5), np.uint8)
+kernel_open = np.ones((3, 3), np.uint8)
+closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel_close)
+mask = cv2.morphologyEx(closed, cv2.MORPH_OPEN, kernel_open)
+
+# Debug: save the binary mask so we can see if the shaft is included.
+cv2.imwrite("tip_mask_debug.jpg", mask)
 
 # --- 3. Find connected components ---
 num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask)
