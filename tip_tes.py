@@ -46,33 +46,65 @@ ys, xs = np.where(labels == largest_label)
 coords = np.column_stack((xs, ys))
 
 # --- 4. Compute centroid of blob ---
-cx = np.mean(xs)
-cy = np.mean(ys)
+# (centre of all pixels belonging to the largest connected component)
+cx = float(np.mean(xs))
+cy = float(np.mean(ys))
+centroid = np.array([cx, cy], dtype=np.float32)
 
-# --- 5. Estimate tip as the point in the blob closest to the board centre ---
-# We assume the dart tip is nearer the board centre than the flight.
-# Compute squared radial distance from the known board centre for each pixel.
-r2 = (xs - BOARD_CX) ** 2 + (ys - BOARD_CY) ** 2
-idx = np.argmin(r2)
-tip_x, tip_y = coords[idx]
+# --- 5. Use PCA to estimate dart orientation ---
+# We treat the blob pixels as a point cloud and find the principal axis.
+coords = np.column_stack((xs, ys)).astype(np.float32)
+coords_centered = coords - centroid
 
-print("Centroid:", (float(cx), float(cy)))
-print("TIP ESTIMATE (closest to board centre):", (int(tip_x), int(tip_y)))
+# Guard against degenerate cases (very small or round blob)
+if coords_centered.shape[0] >= 2:
+    # SVD-based PCA: first right-singular vector gives principal direction in (x, y)
+    _, _, vh = np.linalg.svd(coords_centered, full_matrices=False)
+    direction = vh[0]  # shape (2,)
+
+    # Normalise direction
+    norm = np.linalg.norm(direction)
+    if norm > 1e-6:
+        direction = direction / norm
+    else:
+        direction = np.array([0.0, -1.0], dtype=np.float32)  # fallback
+else:
+    direction = np.array([0.0, -1.0], dtype=np.float32)
+
+# Decide which way along the principal axis is "towards the tip".
+# We assume the dart points roughly towards the board centre.
+board_center = np.array([BOARD_CX, BOARD_CY], dtype=np.float32)
+vec_to_center = board_center - centroid
+
+if np.dot(direction, vec_to_center) < 0:
+    direction = -direction
+
+# Choose a projection length. This does not need to be exact for now; we mostly
+# care about the angular direction. 80 px is a reasonable starting guess.
+proj_len = 80.0
+
+# Estimated tip by projecting from the centroid along the principal axis.
+tip = centroid + direction * proj_len
+
+tip_x, tip_y = int(round(tip[0])), int(round(tip[1]))
+
+print("Centroid:", (cx, cy))
+print("Direction vector (towards centre):", direction.tolist())
+print("TIP ESTIMATE (PCA projection):", (tip_x, tip_y))
 
 # --- 6. Draw results for visual testing ---
 vis = after.copy()
 
 # Draw all pixels in the detected blob so we can see the whole dart shape.
-# coords is an (N, 2) array of (x, y) positions belonging to the largest component.
 for (x, y) in coords:
     vis[int(y), int(x)] = (0, 255, 255)  # yellow blob pixels
 
-# Mark centroid and tip
-cv2.circle(vis, (int(cx), int(cy)), 8, (0, 255, 0), -1)      # green = centroid
-cv2.circle(vis, (int(tip_x), int(tip_y)), 8, (0, 0, 255), -1)  # red = estimated tip
+# Mark centroid (green) and tip (red)
+cv2.circle(vis, (int(round(cx)), int(round(cy))), 8, (0, 255, 0), -1)
+cv2.circle(vis, (tip_x, tip_y), 8, (0, 0, 255), -1)
 
 # Draw a line from centroid (green) to tip (red) for visual reference
-cv2.line(vis, (int(cx), int(cy)), (int(tip_x), int(tip_y)), (255, 0, 0), 2)
+cv2.line(vis, (int(round(cx)), int(round(cy))), (tip_x, tip_y), (255, 0, 0), 2)
 
 cv2.imwrite("tip_debug.jpg", vis)
 print("Saved tip_debug.jpg")
