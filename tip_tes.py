@@ -77,27 +77,43 @@ if np.dot(direction, vec_to_center) < 0:
     direction = -direction
 
 # --- 7. Ray-march from flight towards board centre on raw diff ---
+# We allow the ray to start outside the board and only start
+# looking for a tip once we have actually entered the board mask.
 max_len = 220
 thresh_val = 15
 
 gray_raw = gray  # already grayscale diff
 
 candidate_tip = None
+hit_board = False  # becomes True once the ray enters the board mask
 
 for t in range(int(max_len)):
     px = int(round(cx + direction[0] * t))
     py = int(round(cy + direction[1] * t))
 
+    # Stop if we go off the image
     if px < 0 or px >= w or py < 0 or py >= h:
         break
 
-    # Stay within the board mask only
+    # Board mask logic: before we reach the board, just keep stepping
     if mask_board[py, px] == 0:
-        break
+        if hit_board:
+            # We were already inside the board and have now exited again,
+            # so stop marching.
+            break
+        else:
+            # Still not inside the board yet; keep going.
+            continue
+
+    # At this point we are inside the board region
+    hit_board = True
 
     val = gray_raw[py, px]
     if val >= thresh_val:
         candidate_tip = (px, py)
+
+# If we never found a strong pixel along the ray inside the board,
+# fall back to a fixed projection from the centroid.
 
 if candidate_tip is not None:
     tip_x, tip_y = candidate_tip
