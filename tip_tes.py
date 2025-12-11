@@ -1,9 +1,10 @@
 import cv2
 import numpy as np
 
-# Approximate board centre in image coordinates (tweak if needed)
+# --- Board geometry (must match detect_dart.py) ---
 BOARD_CX = 1042
 BOARD_CY = 625
+BOARD_RADIUS = 180  # outer double radius in pixels – adjust if needed
 
 before = cv2.imread("before.jpg")
 after = cv2.imread("after.jpg")
@@ -11,87 +12,76 @@ after = cv2.imread("after.jpg")
 if before is None or after is None:
     raise RuntimeError("before/after images missing")
 
-# --- 1. Compute difference mask ---
-# Boost the difference a bit so faint pixels (like the shaft) stand out more.
+h, w = before.shape[:2]
+
+# --- 1. Compute raw difference and grayscale ---
 diff = cv2.absdiff(before, after)
 gray = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
 
-# Slight blur to connect nearby pixels along the shaft.
-gray_blur = cv2.GaussianBlur(gray, (5, 5), 0)
+# --- 2. Build a circular board mask so we ignore projector junk off the board ---
+mask_board = np.zeros((h, w), dtype=np.uint8)
+cv2.circle(mask_board, (BOARD_CX, BOARD_CY), BOARD_RADIUS, 255, thickness=-1)
 
-# Lower threshold so we keep more of the subtle changes.
+# Optional: erode slightly so we stay just inside the outer double
+mask_board = cv2.erode(mask_board, np.ones((5, 5), np.uint8), iterations=1)
+
+# --- 3. Threshold + morphology, but only inside the board mask ---
+gray_blur = cv2.GaussianBlur(gray, (5, 5), 0)
 _, thresh = cv2.threshold(gray_blur, 10, 255, cv2.THRESH_BINARY)
 
-# --- 2. Morphological cleanup ---
-# First close small gaps (to join broken shaft pixels), then open to remove isolated noise.
+# Apply board mask so nothing outside the dartboard is considered
+thresh = cv2.bitwise_and(thresh, thresh, mask=mask_board)
+
 kernel_close = np.ones((5, 5), np.uint8)
 kernel_open = np.ones((3, 3), np.uint8)
 closed = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel_close)
 mask = cv2.morphologyEx(closed, cv2.MORPH_OPEN, kernel_open)
 
-# Debug: save the binary mask so we can see if the shaft is included.
 cv2.imwrite("tip_mask_debug.jpg", mask)
 
-# --- 3. Find connected components ---
+# --- 4. Connected components to find the dart blob ---
 num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask)
 
 if num_labels <= 1:
     print("No dart blob detected.")
-    exit()
+    cv2.imwrite("tip_debug.jpg", after)
+    raise SystemExit
 
-# Largest component (ignore label 0 = background)
 largest_label = 1 + np.argmax(stats[1:, cv2.CC_STAT_AREA])
-
 ys, xs = np.where(labels == largest_label)
-coords = np.column_stack((xs, ys))
+coords = np.column_stack((xs, ys)).astype(np.float32)
 
-# --- 4. Compute centroid of blob ---
-# (centre of all pixels belonging to the largest connected component)
+# --- 5. Centroid of the blob ---
 cx = float(np.mean(xs))
 cy = float(np.mean(ys))
 centroid = np.array([cx, cy], dtype=np.float32)
 
-# --- 5. Use PCA to estimate dart orientation ---
-# We treat the blob pixels as a point cloud and find the principal axis.
-coords = np.column_stack((xs, ys)).astype(np.float32)
+# --- 6. PCA for orientation ---
 coords_centered = coords - centroid
 
-# Guard against degenerate cases (very small or round blob)
 if coords_centered.shape[0] >= 2:
-    # SVD-based PCA: first right-singular vector gives principal direction in (x, y)
     _, _, vh = np.linalg.svd(coords_centered, full_matrices=False)
-    direction = vh[0]  # shape (2,)
-
-    # Normalise direction
+    direction = vh[0]
     norm = np.linalg.norm(direction)
     if norm > 1e-6:
         direction = direction / norm
     else:
-        direction = np.array([0.0, -1.0], dtype=np.float32)  # fallback
+        direction = np.array([0.0, -1.0], dtype=np.float32)
 else:
     direction = np.array([0.0, -1.0], dtype=np.float32)
 
-# Decide which way along the principal axis is "towards the tip".
-# We assume the dart points roughly towards the board centre.
+# Orient the direction so it points roughly towards the board centre
 board_center = np.array([BOARD_CX, BOARD_CY], dtype=np.float32)
 vec_to_center = board_center - centroid
-
-# Make sure 'direction' roughly points from flight towards board centre
 if np.dot(direction, vec_to_center) < 0:
     direction = -direction
 
-# --- NEW: ray-scan along the direction towards the centre on the *raw diff* ---
-# We want to walk from the flight centroid towards the board centre and
-# find the last pixel where the difference between before/after is "large enough".
-# That should be close to the dart tip.
-max_len = 220  # max distance to scan in pixels (tweak if needed)
-thresh_val = 15  # difference threshold (0-255); tweak up/down as needed
+# --- 7. Ray-march from flight towards board centre on raw diff ---
+max_len = 220
+thresh_val = 15
 
-# Recompute the raw grayscale diff so we can sample it along the ray
-diff = cv2.absdiff(before, after)
-gray_raw = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
+gray_raw = gray  # already grayscale diff
 
-h, w = gray_raw.shape[:2]
 candidate_tip = None
 
 for t in range(int(max_len)):
@@ -101,38 +91,37 @@ for t in range(int(max_len)):
     if px < 0 or px >= w or py < 0 or py >= h:
         break
 
-    val = gray_raw[py, px]
+    # Stay within the board mask only
+    if mask_board[py, px] == 0:
+        break
 
-    # Keep any pixel that is "different enough" from the background
+    val = gray_raw[py, px]
     if val >= thresh_val:
         candidate_tip = (px, py)
 
-# If we found at least one above-threshold pixel along the ray,
-# use the furthest one as the tip; otherwise fall back to simple projection.
 if candidate_tip is not None:
     tip_x, tip_y = candidate_tip
 else:
-    # Fallback: old behaviour – project a fixed length from the centroid
     proj_len = 80.0
     tip = centroid + direction * proj_len
     tip_x, tip_y = int(round(tip[0])), int(round(tip[1]))
 
 print("Centroid:", (cx, cy))
-print("Direction vector (towards centre):", direction.tolist())
-print("TIP ESTIMATE (PCA projection):", (tip_x, tip_y))
+print("Direction (towards centre):", direction.tolist())
+print("Estimated TIP:", (tip_x, tip_y))
 
-# --- 6. Draw results for visual testing ---
+# --- 8. Draw visual debug ---
 vis = after.copy()
 
-# Draw all pixels in the detected blob so we can see the whole dart shape.
+# Draw all blob pixels in yellow so we see the dart mass
 for (x, y) in coords:
-    vis[int(y), int(x)] = (0, 255, 255)  # yellow blob pixels
+    vis[int(y), int(x)] = (0, 255, 255)
 
-# Mark centroid (green) and tip (red)
+# Centroid (green) and tip (red)
 cv2.circle(vis, (int(round(cx)), int(round(cy))), 8, (0, 255, 0), -1)
 cv2.circle(vis, (tip_x, tip_y), 8, (0, 0, 255), -1)
 
-# Draw a line from centroid (green) to tip (red) for visual reference
+# Line from centroid to tip (blue)
 cv2.line(vis, (int(round(cx)), int(round(cy))), (tip_x, tip_y), (255, 0, 0), 2)
 
 cv2.imwrite("tip_debug.jpg", vis)
