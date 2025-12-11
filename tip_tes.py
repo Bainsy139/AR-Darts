@@ -1,6 +1,10 @@
 import cv2
 import numpy as np
 
+# Approximate board centre in image coordinates (tweak if needed)
+BOARD_CX = 1042
+BOARD_CY = 625
+
 before = cv2.imread("before.jpg")
 after = cv2.imread("after.jpg")
 
@@ -33,18 +37,23 @@ coords = np.column_stack((xs, ys))
 cx = np.mean(xs)
 cy = np.mean(ys)
 
-# --- 5. Find furthest pixel from centroid ---
-dists = np.sqrt((xs - cx)**2 + (ys - cy)**2)
-idx = np.argmax(dists)
+# --- 5. Estimate tip as the point in the blob closest to the board centre ---
+# We assume the dart tip is nearer the board centre than the flight.
+# Compute squared radial distance from the known board centre for each pixel.
+r2 = (xs - BOARD_CX) ** 2 + (ys - BOARD_CY) ** 2
+idx = np.argmin(r2)
 tip_x, tip_y = coords[idx]
 
-print("Centroid:", (cx, cy))
-print("TIP ESTIMATE:", (int(tip_x), int(tip_y)))
+print("Centroid:", (float(cx), float(cy)))
+print("TIP ESTIMATE (closest to board centre):", (int(tip_x), int(tip_y)))
 
 # --- 6. Draw results for visual testing ---
 vis = after.copy()
 cv2.circle(vis, (int(cx), int(cy)), 8, (0,255,0), -1)    # green = centroid
 cv2.circle(vis, (int(tip_x), int(tip_y)), 8, (0,0,255), -1)  # red = estimated tip
+
+# Draw a line from centroid (green) to tip (red) for visual reference
+cv2.line(vis, (int(cx), int(cy)), (int(tip_x), int(tip_y)), (255, 0, 0), 2)
 
 cv2.imwrite("tip_debug.jpg", vis)
 print("Saved tip_debug.jpg")
