@@ -76,17 +76,46 @@ else:
 board_center = np.array([BOARD_CX, BOARD_CY], dtype=np.float32)
 vec_to_center = board_center - centroid
 
+# Make sure 'direction' roughly points from flight towards board centre
 if np.dot(direction, vec_to_center) < 0:
     direction = -direction
 
-# Choose a projection length. This does not need to be exact for now; we mostly
-# care about the angular direction. 80 px is a reasonable starting guess.
-proj_len = 80.0
+# --- NEW: ray-scan along the direction towards the centre on the *raw diff* ---
+# We want to walk from the flight centroid towards the board centre and
+# find the last pixel where the difference between before/after is "large enough".
+# That should be close to the dart tip.
+max_len = 220  # max distance to scan in pixels (tweak if needed)
+thresh_val = 15  # difference threshold (0-255); tweak up/down as needed
 
-# Estimated tip by projecting from the centroid along the principal axis.
-tip = centroid + direction * proj_len
+# Recompute the raw grayscale diff so we can sample it along the ray
+diff = cv2.absdiff(before, after)
+gray_raw = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
 
-tip_x, tip_y = int(round(tip[0])), int(round(tip[1]))
+h, w = gray_raw.shape[:2]
+candidate_tip = None
+
+for t in range(int(max_len)):
+    px = int(round(cx + direction[0] * t))
+    py = int(round(cy + direction[1] * t))
+
+    if px < 0 or px >= w or py < 0 or py >= h:
+        break
+
+    val = gray_raw[py, px]
+
+    # Keep any pixel that is "different enough" from the background
+    if val >= thresh_val:
+        candidate_tip = (px, py)
+
+# If we found at least one above-threshold pixel along the ray,
+# use the furthest one as the tip; otherwise fall back to simple projection.
+if candidate_tip is not None:
+    tip_x, tip_y = candidate_tip
+else:
+    # Fallback: old behaviour – project a fixed length from the centroid
+    proj_len = 80.0
+    tip = centroid + direction * proj_len
+    tip_x, tip_y = int(round(tip[0])), int(round(tip[1]))
 
 print("Centroid:", (cx, cy))
 print("Direction vector (towards centre):", direction.tolist())
