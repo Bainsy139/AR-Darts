@@ -17,7 +17,8 @@ gray = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
 _, thresh = cv2.threshold(gray, 25, 255, cv2.THRESH_BINARY)
 
 # --- 2. Morphological cleanup ---
-kernel = np.ones((5,5), np.uint8)
+# Use a smaller kernel so we keep the thin dart shaft in the mask.
+kernel = np.ones((3, 3), np.uint8)
 mask = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
 
 # --- 3. Find connected components ---
@@ -49,8 +50,15 @@ print("TIP ESTIMATE (closest to board centre):", (int(tip_x), int(tip_y)))
 
 # --- 6. Draw results for visual testing ---
 vis = after.copy()
-cv2.circle(vis, (int(cx), int(cy)), 8, (0,255,0), -1)    # green = centroid
-cv2.circle(vis, (int(tip_x), int(tip_y)), 8, (0,0,255), -1)  # red = estimated tip
+
+# Draw all pixels in the detected blob so we can see the whole dart shape.
+# coords is an (N, 2) array of (x, y) positions belonging to the largest component.
+for (x, y) in coords:
+    vis[int(y), int(x)] = (0, 255, 255)  # yellow blob pixels
+
+# Mark centroid and tip
+cv2.circle(vis, (int(cx), int(cy)), 8, (0, 255, 0), -1)      # green = centroid
+cv2.circle(vis, (int(tip_x), int(tip_y)), 8, (0, 0, 255), -1)  # red = estimated tip
 
 # Draw a line from centroid (green) to tip (red) for visual reference
 cv2.line(vis, (int(cx), int(cy)), (int(tip_x), int(tip_y)), (255, 0, 0), 2)
