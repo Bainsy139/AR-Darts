@@ -164,7 +164,6 @@ def find_dart_center(before_img, after_img):
     g_after = preprocess_for_diff(after_img)
 
     # Highlight areas that became darker in the AFTER frame
-    # (dart hole / shadow should be darker than bare board)
     delta = cv2.subtract(g_before, g_after)
 
     _, mask = cv2.threshold(delta, DIFF_THRESHOLD, 255, cv2.THRESH_BINARY)
@@ -173,36 +172,36 @@ def find_dart_center(before_img, after_img):
     mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
     mask = cv2.dilate(mask, kernel, iterations=1)
 
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    # Restrict to plausible board area
+    h, w = mask.shape
+    yy, xx = np.mgrid[0:h, 0:w]
+    dx = xx - BOARD_CX
+    dy = yy - BOARD_CY
+    r = np.sqrt(dx * dx + dy * dy)
+    board_mask = (r <= BOARD_RADIUS * 1.1)
+    mask = np.where(board_mask, mask, 0).astype(np.uint8)
 
-    best_center = None
-    best_score = -1.0
+    # Extract all candidate pixels
+    ys, xs = np.where(mask == 255)
+    if len(xs) == 0:
+        return None, mask
 
-    for cnt in contours:
-        area = cv2.contourArea(cnt)
-        if area < MIN_BLOB_AREA:
-            continue
+    coords = np.column_stack((xs, ys)).astype(np.float32)
 
-        M = cv2.moments(cnt)
-        if M["m00"] == 0:
-            continue
-        cx = M["m10"] / M["m00"]
-        cy = M["m01"] / M["m00"]
+    # Distance to board centre
+    dx = coords[:, 0] - BOARD_CX
+    dy = coords[:, 1] - BOARD_CY
+    d2 = dx * dx + dy * dy
 
-        dx = cx - BOARD_CX
-        dy = cy - BOARD_CY
-        r = math.hypot(dx, dy)
-        if r > BOARD_RADIUS * 1.2:
-            continue
+    # Take K closest pixels to centre and average them
+    K = int(max(1, min(25, len(d2))))
+    idx = np.argpartition(d2, K - 1)[:K]
+    tip_pt = np.mean(coords[idx], axis=0)
 
-        r_frac = r / max(1.0, BOARD_RADIUS)
-        score = area * (0.5 + r_frac)
+    tip_x = float(tip_pt[0])
+    tip_y = float(tip_pt[1])
 
-        if score > best_score:
-            best_score = score
-            best_center = (cx, cy)
-
-    return best_center, mask
+    return (tip_x, tip_y), mask
 
 
 def detect_impact(before_img, after_img):
