@@ -5,6 +5,7 @@ import numpy as np
 BOARD_CX = 1042
 BOARD_CY = 625
 BOARD_RADIUS = 180  # outer double radius in pixels – adjust if needed
+TIP_OFFSET_PIXELS = 25  # initial guess: pixels from flight centroid towards board centre
 
 before = cv2.imread("before.jpg")
 after = cv2.imread("after.jpg")
@@ -56,74 +57,26 @@ cx = float(np.mean(xs))
 cy = float(np.mean(ys))
 centroid = np.array([cx, cy], dtype=np.float32)
 
-# --- 6. PCA for orientation ---
-coords_centered = coords - centroid
+# --- 6. Estimate tip by shifting towards board centre ---
+# We assume the flight centroid lies roughly a fixed distance behind the tip
+# along the radial line from the board centre. So we move a fixed number of
+# pixels from the centroid towards the centre.
 
-if coords_centered.shape[0] >= 2:
-    _, _, vh = np.linalg.svd(coords_centered, full_matrices=False)
-    direction = vh[0]
-    norm = np.linalg.norm(direction)
-    if norm > 1e-6:
-        direction = direction / norm
-    else:
-        direction = np.array([0.0, -1.0], dtype=np.float32)
-else:
-    direction = np.array([0.0, -1.0], dtype=np.float32)
-
-# Orient the direction so it points roughly towards the board centre
+centroid_pt = np.array([cx, cy], dtype=np.float32)
 board_center = np.array([BOARD_CX, BOARD_CY], dtype=np.float32)
-vec_to_center = board_center - centroid
-if np.dot(direction, vec_to_center) < 0:
-    direction = -direction
 
-# --- 7. Ray-march from flight towards board centre on raw diff ---
-# We allow the ray to start outside the board and only start
-# looking for a tip once we have actually entered the board mask.
-max_len = 220
-thresh_val = 15
+vec = centroid_pt - board_center
+dist = np.linalg.norm(vec)
 
-gray_raw = gray  # already grayscale diff
-
-candidate_tip = None
-hit_board = False  # becomes True once the ray enters the board mask
-
-for t in range(int(max_len)):
-    px = int(round(cx + direction[0] * t))
-    py = int(round(cy + direction[1] * t))
-
-    # Stop if we go off the image
-    if px < 0 or px >= w or py < 0 or py >= h:
-        break
-
-    # Board mask logic: before we reach the board, just keep stepping
-    if mask_board[py, px] == 0:
-        if hit_board:
-            # We were already inside the board and have now exited again,
-            # so stop marching.
-            break
-        else:
-            # Still not inside the board yet; keep going.
-            continue
-
-    # At this point we are inside the board region
-    hit_board = True
-
-    val = gray_raw[py, px]
-    if val >= thresh_val:
-        candidate_tip = (px, py)
-
-# If we never found a strong pixel along the ray inside the board,
-# fall back to a fixed projection from the centroid.
-
-if candidate_tip is not None:
-    tip_x, tip_y = candidate_tip
+if dist < 1e-3:
+    # Degenerate: centroid basically at centre
+    tip_x, tip_y = int(round(cx)), int(round(cy))
 else:
-    proj_len = 80.0
-    tip = centroid + direction * proj_len
-    tip_x, tip_y = int(round(tip[0])), int(round(tip[1]))
+    direction = vec / dist  # points from centre to centroid
+    tip_pt = centroid_pt - direction * TIP_OFFSET_PIXELS
+    tip_x, tip_y = int(round(tip_pt[0])), int(round(tip_pt[1]))
 
 print("Centroid:", (cx, cy))
-print("Direction (towards centre):", direction.tolist())
 print("Estimated TIP:", (tip_x, tip_y))
 
 # --- 8. Draw visual debug ---
