@@ -206,11 +206,33 @@ def _tip_from_pca_endpoints(coords: np.ndarray, board_center: np.ndarray):
     end1 = mean + u * pmin
     end2 = mean + u * pmax
 
-    # Choose inward endpoint (closest to board centre)
-    d1 = float(np.hypot(end1[0] - board_center[0], end1[1] - board_center[1]))
-    d2 = float(np.hypot(end2[0] - board_center[0], end2[1] - board_center[1]))
+    # Vector from centroid toward board centre
+    vc = board_center - mean
+    vc_norm = float(np.hypot(vc[0], vc[1]))
+    if vc_norm < 1e-6:
+        return None, None
+    vc /= vc_norm
 
-    tip = end1 if d1 >= d2 else end2
+    v1 = end1 - mean
+    v2 = end2 - mean
+
+    dot1 = float(np.dot(v1, vc))
+    dot2 = float(np.dot(v2, vc))
+
+    # Only accept endpoints that actually point toward the board
+    candidates = []
+    if dot1 > 0:
+        candidates.append((dot1, end1))
+    if dot2 > 0:
+        candidates.append((dot2, end2))
+
+    if not candidates:
+        # PCA axis unreliable → force fallback
+        return None, None
+
+    # Choose the endpoint most aligned with board centre
+    _, tip = max(candidates, key=lambda x: x[0])
+
     return tip.astype(np.float32), u.astype(np.float32)
 
 
