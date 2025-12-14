@@ -298,7 +298,7 @@ def find_dart_center(before_img, after_img):
         edges = cv2.dilate(edges, np.ones((3, 3), np.uint8), iterations=EDGE_DILATE_ITERS)
 
     ys, xs = np.where(edges > 0)
-        print(f"[DEBUG] Found {len(xs)} edge pixels after Canny")
+    print(f"[DEBUG] Found {len(xs)} edge pixels after Canny")
     if len(xs) < MIN_EDGE_PIXELS:
         return None, edges
 
