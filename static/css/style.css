@@ -1,5 +1,5 @@
 body {
-  background-color: #111;
+  background-color: #000000;
   color: white;
   text-align: center;
   margin: 0;
@@ -29,8 +29,9 @@ body {
   position: relative;
   width: var(--stage-w);
   height: var(--stage-h);
-  background: #222;
-  border: 2px solid #ffffff;
+  /* this is the container background colour */
+  background: #ffffff;
+  border: 5px solid #1fd2ff;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -204,23 +205,20 @@ input[type="range"] {
   right: 0;
 }
 
-/* Neon glass card */
+/* Player card */
 .hud-side .card {
-  width: 95%;
+  width: 80%;
   padding: 12px 14px;
   border-radius: 12px;
-  background: linear-gradient(
-    180deg,
-    rgba(34, 89, 255, 0.6),
-    rgba(10, 12, 18, 0.38)
-  );
-  border: 1px solid rgba(0, 255, 255, 0.22);
-  box-shadow: 0 0 24px rgb(254, 21, 246) inset,
-    0 6px 18px rgba(0, 0, 0, 0.35);
+  /* player card colours here */
+  background: radial-gradient(#ff4df9, #00aaff);
+  border: 2px solid rgba(8, 214, 255, 1);
+  box-shadow: 0 0 24px rgb(8, 214, 255) inset, 0 6px 18px rgb(255, 255, 255);
   backdrop-filter: blur(2.5px);
   -webkit-backdrop-filter: blur(2.5px);
-  color: #dff8ff;
-  text-shadow: 0 0 6px rgba(0, 255, 255, 0.25);
+  /* this is the text colour */
+  color: #ffffff;
+  text-shadow: 0 0 2px rgb(255, 255, 255);
   pointer-events: none;
 }
 
