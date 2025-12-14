@@ -80,15 +80,15 @@ WARP_MATRIX = cv2.getPerspectiveTransform(SRC_POINTS, DST_POINTS)
 
 # Threshold tuning
 DIFF_BLUR_KSIZE = 9
-DIFF_THRESHOLD = 25
-MIN_BLOB_AREA = 30
+DIFF_THRESHOLD = 15
+MIN_BLOB_AREA = 10
 
 # Tip-biased edge-diff tuning (no ML, single before/after)
 HP_BLUR_KSIZE = 41          # large blur to remove low-frequency illumination changes
 CANNY_LOW = 40              # edge thresholds for high-pass diff
 CANNY_HIGH = 120
 EDGE_DILATE_ITERS = 1       # slightly thicken edges so we get a stable point
-MIN_EDGE_PIXELS = 25        # minimum edge pixels to accept a detection
+MIN_EDGE_PIXELS = 8        # minimum edge pixels to accept a detection
 TIP_K_CLOSEST = 25          # average of K most-inward edge pixels
 
 # Ray-constrained tip selection (for picking the actual dart tip, not shaft/flight edge)
@@ -298,6 +298,7 @@ def find_dart_center(before_img, after_img):
         edges = cv2.dilate(edges, np.ones((3, 3), np.uint8), iterations=EDGE_DILATE_ITERS)
 
     ys, xs = np.where(edges > 0)
+        print(f"[DEBUG] Found {len(xs)} edge pixels after Canny")
     if len(xs) < MIN_EDGE_PIXELS:
         return None, edges
 
