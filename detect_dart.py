@@ -91,6 +91,10 @@ EDGE_DILATE_ITERS = 1       # slightly thicken edges so we get a stable point
 MIN_EDGE_PIXELS = 25        # minimum edge pixels to accept a detection
 TIP_K_CLOSEST = 25          # average of K most-inward edge pixels
 
+# Ray-constrained tip selection (for picking the actual dart tip, not shaft/flight edge)
+RAY_BAND_PX = 10            # max perpendicular distance (px) from the centre→centroid ray to consider as “dart-aligned”
+MIN_RAY_PIXELS = 15         # min pixels on that ray band to trust the ray-based tip
+
 
 def sector_index_from_angle(angle: float) -> int:
     """Match the JS sector indexing logic."""
@@ -201,13 +205,39 @@ def find_dart_center(before_img, after_img):
 
     coords = np.column_stack((xs, ys)).astype(np.float32)
 
-    # 5) Tip heuristic: choose the most inward edge pixels (closest to board centre)
+    # 5) Tip heuristic (ray-constrained):
+    #    Use the ray from board centre → edge centroid as an approximation of the dart direction.
+    #    Then select the most inward point along that ray (closest to centre) while staying near the ray.
     c = np.array([BOARD_CX, BOARD_CY], dtype=np.float32)
-    d2 = np.sum((coords - c) ** 2, axis=1)
+    centroid = coords.mean(axis=0)
+    v = centroid - c
+    v_norm = float(np.hypot(v[0], v[1]))
 
-    k = min(TIP_K_CLOSEST, len(d2))
-    idxs = np.argpartition(d2, k - 1)[:k]
-    tip = coords[idxs].mean(axis=0)
+    tip = None
+
+    if v_norm > 1e-6:
+        d = v / v_norm  # unit direction from centre outward
+
+        # projection along the ray (t) and perpendicular distance to the ray (perp)
+        rel = coords - c
+        t = rel[:, 0] * d[0] + rel[:, 1] * d[1]
+        perp = np.abs(rel[:, 0] * (-d[1]) + rel[:, 1] * d[0])
+
+        # candidates: in front of the centre and close to the ray
+        mask = (t > 0) & (perp <= RAY_BAND_PX)
+        cand = coords[mask]
+        cand_t = t[mask]
+
+        if len(cand) >= MIN_RAY_PIXELS:
+            # most inward point along the ray (minimum t)
+            tip = cand[int(np.argmin(cand_t))]
+
+    # Fallback: original “K closest to centre” average if ray band is too sparse
+    if tip is None:
+        d2 = np.sum((coords - c) ** 2, axis=1)
+        k = min(TIP_K_CLOSEST, len(d2))
+        idxs = np.argpartition(d2, k - 1)[:k]
+        tip = coords[idxs].mean(axis=0)
 
     return (float(tip[0]), float(tip[1])), edges
 
