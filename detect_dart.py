@@ -165,7 +165,6 @@ def find_dart_center(before_img, after_img):
 
     # Highlight areas that became darker in the AFTER frame
     delta = cv2.subtract(g_before, g_after)
-
     _, mask = cv2.threshold(delta, DIFF_THRESHOLD, 255, cv2.THRESH_BINARY)
 
     kernel = np.ones((3, 3), np.uint8)
@@ -181,62 +180,42 @@ def find_dart_center(before_img, after_img):
     board_mask = (r <= BOARD_RADIUS * 1.1)
     mask = np.where(board_mask, mask, 0).astype(np.uint8)
 
-    # Pick the dominant connected component (single-dart scenes)
-    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
-    if num_labels <= 1:
+    # Connected components so we can isolate the dart blob
+    num, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    if num <= 1:
         return None, mask
 
-    areas = stats[:, cv2.CC_STAT_AREA].copy()
-    areas[0] = 0  # background
-    best_label = int(np.argmax(areas))
-    best_area = int(areas[best_label])
-    if best_area < MIN_BLOB_AREA:
+    # pick largest component (ignore background label 0)
+    areas = stats[1:, cv2.CC_STAT_AREA]
+    best_i = int(np.argmax(areas)) + 1
+    if stats[best_i, cv2.CC_STAT_AREA] < MIN_BLOB_AREA:
         return None, mask
 
-    comp_mask = (labels == best_label).astype(np.uint8) * 255
-
-    ys, xs = np.where(comp_mask == 255)
-    if len(xs) < 2:
-        return None, comp_mask
+    ys, xs = np.where(labels == best_i)
+    if len(xs) < 10:
+        return None, mask
 
     coords = np.column_stack((xs, ys)).astype(np.float32)
 
-    # Fit a line to the component (major axis) and take the inward endpoint.
-    # This is robust when the blob is mostly the flight/shaft: the inward end is closest to the board centre.
-    pts = coords.reshape(-1, 1, 2)
-    vx, vy, x0, y0 = cv2.fitLine(pts, cv2.DIST_L2, 0, 0.01, 0.01)
-    vx = float(vx)
-    vy = float(vy)
-    x0 = float(x0)
-    y0 = float(y0)
+    # Fit a line through the blob to get its major axis
+    # fitLine returns (vx, vy, x0, y0) where (vx,vy) is unit direction
+    vx, vy, x0, y0 = cv2.fitLine(coords, cv2.DIST_L2, 0, 0.01, 0.01).flatten()
 
-    # Normalize direction
-    norm = math.hypot(vx, vy)
-    if norm < 1e-6:
-        return None, comp_mask
-    vx /= norm
-    vy /= norm
+    # Project all blob points onto the axis, find extremes -> endpoints
+    d = np.array([vx, vy], dtype=np.float32)
+    p0 = np.array([x0, y0], dtype=np.float32)
+    t = (coords - p0) @ d
+    p_min = p0 + d * float(t.min())
+    p_max = p0 + d * float(t.max())
 
-    # Project points onto the fitted line direction and take extremes as endpoints
-    dxp = coords[:, 0] - x0
-    dyp = coords[:, 1] - y0
-    t = dxp * vx + dyp * vy
+    # Tip is the endpoint closer to board centre (flight is further out)
+    c = np.array([BOARD_CX, BOARD_CY], dtype=np.float32)
+    if np.sum((p_min - c) ** 2) <= np.sum((p_max - c) ** 2):
+        tip = p_min
+    else:
+        tip = p_max
 
-    i_min = int(np.argmin(t))
-    i_max = int(np.argmax(t))
-    p_min = coords[i_min]
-    p_max = coords[i_max]
-
-    # Choose the endpoint closer to the board centre as the tip
-    d_min = (p_min[0] - BOARD_CX) ** 2 + (p_min[1] - BOARD_CY) ** 2
-    d_max = (p_max[0] - BOARD_CX) ** 2 + (p_max[1] - BOARD_CY) ** 2
-
-    tip_pt = p_min if d_min < d_max else p_max
-
-    tip_x = float(tip_pt[0])
-    tip_y = float(tip_pt[1])
-
-    return (tip_x, tip_y), comp_mask
+    return (float(tip[0]), float(tip[1])), mask
 
 
 def detect_impact(before_img, after_img):
@@ -302,18 +281,67 @@ def draw_debug_overlay(input_path: str, output_path: str):
 
     cv2.imwrite(output_path, overlay)
 
+def draw_debug_overlay_with_hit(input_path: str, hit_xy, output_path: str):
+    img = load_image(input_path)
+    overlay = img.copy()
+
+    center = (int(round(BOARD_CX)), int(round(BOARD_CY)))
+
+    cv2.circle(overlay, center, int(round(BOARD_RADIUS)), (0, 0, 255), 2)
+
+    ring_fracs = [0.035, 0.09, 0.57, 0.63, 0.95]
+    for frac in ring_fracs:
+        r = int(round(BOARD_RADIUS * frac))
+        cv2.circle(overlay, center, r, (0, 255, 0), 1)
+
+    rot_rad = math.radians(ROT_OFFSET_DEG)
+    two_pi = 2.0 * math.pi
+    for k in range(20):
+        angle = -math.pi / 2 + rot_rad + (k * two_pi / 20.0)
+        x2 = int(round(BOARD_CX + BOARD_RADIUS * math.cos(angle)))
+        y2 = int(round(BOARD_CY + BOARD_RADIUS * math.sin(angle)))
+        cv2.line(overlay, center, (x2, y2), (255, 0, 0), 1)
+
+    cv2.circle(overlay, center, 3, (255, 255, 255), -1)
+
+    if hit_xy is not None:
+        hx, hy = hit_xy
+        cv2.circle(overlay, (int(round(hx)), int(round(hy))), 10, (0, 0, 255), -1)
+
+    cv2.imwrite(output_path, overlay)
+
 
 def main():
     # Debug overlay mode:
     #   python3 detect_dart.py overlay INPUT.jpg OUTPUT.jpg
+    # Overlay + hit marker mode:
+    #   python3 detect_dart.py overlayhit BEFORE.jpg AFTER.jpg OUTPUT.jpg
     if len(sys.argv) >= 2 and sys.argv[1] == "overlay":
         if len(sys.argv) != 4:
             print("Usage: python3 detect_dart.py overlay INPUT.jpg OUTPUT.jpg")
             sys.exit(1)
+
         input_path = sys.argv[2]
-        output_path = sys.argv[3]
-        draw_debug_overlay(input_path, output_path)
-        print(f"Overlay written to {output_path}")
+        out_path = sys.argv[3]
+        draw_debug_overlay(input_path, out_path)
+        print(f"Overlay written to {out_path}")
+        sys.exit(0)
+
+    if len(sys.argv) >= 2 and sys.argv[1] == "overlayhit":
+        if len(sys.argv) != 5:
+            print("Usage: python3 detect_dart.py overlayhit BEFORE.jpg AFTER.jpg OUTPUT.jpg")
+            sys.exit(1)
+
+        before_path = sys.argv[2]
+        after_path = sys.argv[3]
+        out_path = sys.argv[4]
+
+        before = load_image(before_path)
+        after = load_image(after_path)
+
+        center, _ = find_dart_center(before, after)
+        draw_debug_overlay_with_hit(after_path, center, out_path)
+        print(f"Overlay+hit written to {out_path}")
         sys.exit(0)
 
     # Default CLI mode:
@@ -322,6 +350,7 @@ def main():
         print("Usage:")
         print("  python3 detect_dart.py BEFORE.jpg AFTER.jpg")
         print("  python3 detect_dart.py overlay INPUT.jpg OUTPUT.jpg")
+        print("  python3 detect_dart.py overlayhit BEFORE.jpg AFTER.jpg OUTPUT.jpg")
         sys.exit(1)
 
     before_path = sys.argv[1]
