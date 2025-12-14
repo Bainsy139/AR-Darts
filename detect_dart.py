@@ -16,7 +16,7 @@ BOARD_RADIUS = 130  # pixels from centre to outer double ring edge (tweak if ove
 # Rotation offset in degrees to align sector 20 to the top
 # Previously -18.0, but tests show we were off by one full wedge (18°).
 # Using 0.0 brings 20/1/5/19/15 etc into the correct sectors.
-ROT_OFFSET_DEG = -7.8
+ROT_OFFSET_DEG = -5.8
 
 # Rough ring ratios – we’ll refine later
 def ring_from_radius_frac(r_frac: float) -> str:
@@ -96,7 +96,7 @@ RAY_BAND_PX = 10            # max perpendicular distance (px) from the centre→
 MIN_RAY_PIXELS = 15         # min pixels on that ray band to trust the ray-based tip
 
 # Tip selection tuning
-TIP_NUDGE_PX = 6            # after selecting the inward endpoint, nudge slightly further toward board centre
+TIP_NUDGE_PX = 2            # after selecting the inward endpoint, nudge slightly further toward board centre
 COMP_DILATE_ITERS = 2       # dilate the coarse diff blob so edge pixels from the dart are included
 
 def sector_index_from_angle(angle: float) -> int:
@@ -468,6 +468,7 @@ def main():
         after = load_image(after_path)
 
         center, _ = find_dart_center(before, after)
+        print(f"DEBUG: Estimated tip @ {center}")
         draw_debug_overlay_with_hit(after_path, center, out_path)
         print(f"Overlay+hit written to {out_path}")
         sys.exit(0)
