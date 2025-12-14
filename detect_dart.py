@@ -197,23 +197,15 @@ def find_dart_center(before_img, after_img):
 
     coords = np.column_stack((xs, ys)).astype(np.float32)
 
-    # Fit a line through the blob to get its major axis
-    # fitLine returns (vx, vy, x0, y0) where (vx,vy) is unit direction
-    vx, vy, x0, y0 = cv2.fitLine(coords, cv2.DIST_L2, 0, 0.01, 0.01).flatten()
-
-    # Project all blob points onto the axis, find extremes -> endpoints
-    d = np.array([vx, vy], dtype=np.float32)
-    p0 = np.array([x0, y0], dtype=np.float32)
-    t = (coords - p0) @ d
-    p_min = p0 + d * float(t.min())
-    p_max = p0 + d * float(t.max())
-
-    # Tip is the endpoint closer to board centre (flight is further out)
+    # Tip heuristic (robust): pick the blob pixel(s) closest to the board centre.
+    # This directly uses the constraint: flight is always further from centre than the tip.
     c = np.array([BOARD_CX, BOARD_CY], dtype=np.float32)
-    if np.sum((p_min - c) ** 2) <= np.sum((p_max - c) ** 2):
-        tip = p_min
-    else:
-        tip = p_max
+    d2 = np.sum((coords - c) ** 2, axis=1)
+
+    # Average a small set of the closest pixels to reduce noise.
+    k = min(20, len(d2))
+    idxs = np.argpartition(d2, k - 1)[:k]
+    tip = coords[idxs].mean(axis=0)
 
     return (float(tip[0]), float(tip[1])), mask
 
@@ -306,7 +298,10 @@ def draw_debug_overlay_with_hit(input_path: str, hit_xy, output_path: str):
 
     if hit_xy is not None:
         hx, hy = hit_xy
-        cv2.circle(overlay, (int(round(hx)), int(round(hy))), 10, (0, 0, 255), -1)
+        pt = (int(round(hx)), int(round(hy)))
+        cv2.circle(overlay, pt, 12, (255, 255, 255), 2)  # white outline
+        cv2.circle(overlay, pt, 10, (0, 0, 255), -1)     # red fill
+        cv2.circle(overlay, pt, 2, (0, 0, 0), -1)        # black center
 
     cv2.imwrite(output_path, overlay)
 
