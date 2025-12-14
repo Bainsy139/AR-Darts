@@ -95,6 +95,9 @@ TIP_K_CLOSEST = 25          # average of K most-inward edge pixels
 RAY_BAND_PX = 10            # max perpendicular distance (px) from the centre→centroid ray to consider as “dart-aligned”
 MIN_RAY_PIXELS = 15         # min pixels on that ray band to trust the ray-based tip
 
+# Tip selection tuning
+TIP_NUDGE_PX = 6            # after selecting the inward endpoint, nudge slightly further toward board centre
+COMP_DILATE_ITERS = 2       # dilate the coarse diff blob so edge pixels from the dart are included
 
 def sector_index_from_angle(angle: float) -> int:
     """Match the JS sector indexing logic."""
@@ -170,6 +173,47 @@ def preprocess_for_diff(img):
     return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
 
+def _tip_from_pca_endpoints(coords: np.ndarray, board_center: np.ndarray):
+    """Return the inward endpoint along the major axis of a set of (x,y) points.
+
+    coords: float32 array shape (N,2) in (x,y)
+    board_center: float32 array shape (2,)
+
+    Returns: (tip_xy, axis_unit) where tip_xy is float32 (2,) and axis_unit is float32 (2,)
+    """
+    if coords is None or len(coords) < 5:
+        return None, None
+
+    pts = coords.astype(np.float32)
+    mean = pts.mean(axis=0)
+    centered = pts - mean
+
+    # PCA via covariance eigenvectors
+    cov = (centered.T @ centered) / max(1.0, float(len(pts)))
+    eigvals, eigvecs = np.linalg.eigh(cov)
+    axis = eigvecs[:, int(np.argmax(eigvals))].astype(np.float32)
+
+    axis_norm = float(np.hypot(axis[0], axis[1]))
+    if axis_norm < 1e-6:
+        return None, None
+
+    u = axis / axis_norm  # unit major axis
+
+    proj = centered @ u
+    pmin = float(np.min(proj))
+    pmax = float(np.max(proj))
+
+    end1 = mean + u * pmin
+    end2 = mean + u * pmax
+
+    # Choose inward endpoint (closest to board centre)
+    d1 = float(np.hypot(end1[0] - board_center[0], end1[1] - board_center[1]))
+    d2 = float(np.hypot(end2[0] - board_center[0], end2[1] - board_center[1]))
+
+    tip = end1 if d1 <= d2 else end2
+    return tip.astype(np.float32), u.astype(np.float32)
+
+
 def find_dart_center(before_img, after_img):
     g_before = preprocess_for_diff(before_img)
     g_after = preprocess_for_diff(after_img)
@@ -177,62 +221,97 @@ def find_dart_center(before_img, after_img):
     # 1) Absolute difference (captures both darker and brighter changes)
     diff = cv2.absdiff(g_before, g_after)
 
-    # 2) High-pass the diff to reduce projector/illumination drift.
-    #    Remove low-frequency changes (like soft shadows / exposure) while keeping sharp structure (dart edges).
-    hp = diff.astype(np.float32) - cv2.GaussianBlur(diff, (HP_BLUR_KSIZE, HP_BLUR_KSIZE), 0).astype(np.float32)
-    hp = np.clip(hp, 0, 255).astype(np.uint8)
-
-    # 3) Restrict to plausible board area early (prevents off-board noise from winning).
-    h, w = hp.shape
+    # 2) Restrict to plausible board area early (prevents off-board noise from winning).
+    h, w = diff.shape
     yy, xx = np.mgrid[0:h, 0:w]
     dx = xx - BOARD_CX
     dy = yy - BOARD_CY
     r = np.sqrt(dx * dx + dy * dy)
     board_mask = (r <= BOARD_RADIUS * 1.1)
-    hp = np.where(board_mask, hp, 0).astype(np.uint8)
+    diff = np.where(board_mask, diff, 0).astype(np.uint8)
 
-    # 4) Edges of the high-pass diff. This suppresses “fat” blobs from flights/shadows
-    #    and prefers sharp boundaries (shaft/tip/wire).
+    # 3) Coarse blob from diff to localise the dart change.
+    #    This is intentionally "fat" and tolerant; we only use it to gate edge pixels later.
+    diff_blur = cv2.GaussianBlur(diff, (DIFF_BLUR_KSIZE, DIFF_BLUR_KSIZE), 0)
+    _, diff_bin = cv2.threshold(diff_blur, DIFF_THRESHOLD, 255, cv2.THRESH_BINARY)
+
+    # Close then open (fill gaps, remove speckle)
+    k = np.ones((5, 5), np.uint8)
+    diff_bin = cv2.morphologyEx(diff_bin, cv2.MORPH_CLOSE, k, iterations=1)
+    diff_bin = cv2.morphologyEx(diff_bin, cv2.MORPH_OPEN, k, iterations=1)
+
+    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(diff_bin, connectivity=8)
+
+    # Pick the largest component inside the board (ignore background label 0)
+    best_label = None
+    best_area = 0
+    for lab in range(1, num_labels):
+        area = int(stats[lab, cv2.CC_STAT_AREA])
+        if area < MIN_BLOB_AREA:
+            continue
+        if area > best_area:
+            best_area = area
+            best_label = lab
+
+    if best_label is None:
+        # Still return an image for debug callers
+        return None, diff_bin
+
+    comp = (labels == best_label).astype(np.uint8) * 255
+
+    if COMP_DILATE_ITERS > 0:
+        comp = cv2.dilate(comp, np.ones((3, 3), np.uint8), iterations=COMP_DILATE_ITERS)
+
+    # 4) High-pass the diff to reduce projector/illumination drift.
+    hp = diff.astype(np.float32) - cv2.GaussianBlur(diff, (HP_BLUR_KSIZE, HP_BLUR_KSIZE), 0).astype(np.float32)
+    hp = np.clip(hp, 0, 255).astype(np.uint8)
+
+    # Gate hp to the coarse component mask so UI/lighting edges don't dominate
+    hp = cv2.bitwise_and(hp, hp, mask=comp)
+
+    # 5) Edges of the gated high-pass diff.
     edges = cv2.Canny(hp, CANNY_LOW, CANNY_HIGH)
 
     if EDGE_DILATE_ITERS > 0:
-        kernel = np.ones((3, 3), np.uint8)
-        edges = cv2.dilate(edges, kernel, iterations=EDGE_DILATE_ITERS)
+        edges = cv2.dilate(edges, np.ones((3, 3), np.uint8), iterations=EDGE_DILATE_ITERS)
 
     ys, xs = np.where(edges > 0)
     if len(xs) < MIN_EDGE_PIXELS:
         return None, edges
 
     coords = np.column_stack((xs, ys)).astype(np.float32)
-
-    # 5) Tip heuristic (ray-constrained):
-    #    Use the ray from board centre → edge centroid as an approximation of the dart direction.
-    #    Then select the most inward point along that ray (closest to centre) while staying near the ray.
     c = np.array([BOARD_CX, BOARD_CY], dtype=np.float32)
-    centroid = coords.mean(axis=0)
-    v = centroid - c
-    v_norm = float(np.hypot(v[0], v[1]))
 
+    # 6) Primary tip heuristic: major-axis inward endpoint (PCA)
     tip = None
+    axis_u = None
+    tip_pca, axis_u = _tip_from_pca_endpoints(coords, c)
+    if tip_pca is not None:
+        # Nudge a little further toward the board centre (helps when the endpoint is the shaft edge)
+        v = c - tip_pca
+        vn = float(np.hypot(v[0], v[1]))
+        if vn > 1e-6:
+            tip = tip_pca + (v / vn) * float(TIP_NUDGE_PX)
+        else:
+            tip = tip_pca
 
-    if v_norm > 1e-6:
-        d = v / v_norm  # unit direction from centre outward
+    # 7) Secondary: ray-constrained inward point (keeps behaviour when PCA is unstable)
+    if tip is None:
+        centroid = coords.mean(axis=0)
+        v = centroid - c
+        v_norm = float(np.hypot(v[0], v[1]))
+        if v_norm > 1e-6:
+            d = v / v_norm  # unit direction from centre outward
+            rel = coords - c
+            t = rel[:, 0] * d[0] + rel[:, 1] * d[1]
+            perp = np.abs(rel[:, 0] * (-d[1]) + rel[:, 1] * d[0])
+            mask = (t > 0) & (perp <= RAY_BAND_PX)
+            cand = coords[mask]
+            cand_t = t[mask]
+            if len(cand) >= MIN_RAY_PIXELS:
+                tip = cand[int(np.argmin(cand_t))]
 
-        # projection along the ray (t) and perpendicular distance to the ray (perp)
-        rel = coords - c
-        t = rel[:, 0] * d[0] + rel[:, 1] * d[1]
-        perp = np.abs(rel[:, 0] * (-d[1]) + rel[:, 1] * d[0])
-
-        # candidates: in front of the centre and close to the ray
-        mask = (t > 0) & (perp <= RAY_BAND_PX)
-        cand = coords[mask]
-        cand_t = t[mask]
-
-        if len(cand) >= MIN_RAY_PIXELS:
-            # most inward point along the ray (minimum t)
-            tip = cand[int(np.argmin(cand_t))]
-
-    # Fallback: original “K closest to centre” average if ray band is too sparse
+    # 8) Final fallback: average of K closest edge pixels to centre
     if tip is None:
         d2 = np.sum((coords - c) ** 2, axis=1)
         k = min(TIP_K_CLOSEST, len(d2))
