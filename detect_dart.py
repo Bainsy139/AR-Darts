@@ -210,7 +210,7 @@ def _tip_from_pca_endpoints(coords: np.ndarray, board_center: np.ndarray):
     d1 = float(np.hypot(end1[0] - board_center[0], end1[1] - board_center[1]))
     d2 = float(np.hypot(end2[0] - board_center[0], end2[1] - board_center[1]))
 
-    tip = end1 if d1 <= d2 else end2
+    tip = end1 if d1 >= d2 else end2
     return tip.astype(np.float32), u.astype(np.float32)
 
 
