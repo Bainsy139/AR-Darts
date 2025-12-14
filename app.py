@@ -34,7 +34,11 @@ def play(game):
     if game not in ('around', 'x01'):
         game = 'around'
     start = int(request.args.get('start', 501))
-    double_out = request.args.get('double_out', '1') == '1'
+    # Support both legacy double_out=1 and newer doubleOut=true
+    if 'doubleOut' in request.args:
+        double_out = request.args.get('doubleOut', 'true').lower() == 'true'
+    else:
+        double_out = request.args.get('double_out', '1') == '1'
     return render_template('play.html', game=game, start=start, double_out=double_out)
 
 

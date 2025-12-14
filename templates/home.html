@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>AR Darts — Game Picker</title>
+    <title>Bainsy Builds AR Darts</title>
     <link
       rel="stylesheet"
       href="{{ url_for('static', filename='css/style.css') }}"
@@ -257,20 +257,26 @@
     </style>
   </head>
   <body>
+    {% set is_admin = request.args.get('admin') %}
     <header>
       <h1>AR Darts — Game Selection</h1>
-      <a class="btn" href="/play/around">Projector View</a>
+      <a class="btn" href="/play/around{% if is_admin %}?admin=1{% endif %}"
+        >Projector View</a
+      >
     </header>
 
     <main>
       <section class="grid">
-        <a class="card" href="/play/around">
+        <a class="card" href="/play/around{% if is_admin %}?admin=1{% endif %}">
           <span class="pill">Classic</span>
           <h2>Around the World</h2>
           <p>Hit 1→20 then Bull. Doubles skip 1, trebles skip 2.</p>
         </a>
 
-        <a class="card" href="/play/x01?start=501&double_out=1">
+        <a
+          class="card"
+          href="/play/x01?start=501&doubleOut=true{% if is_admin %}&admin=1{% endif %}"
+        >
           <span class="pill">x01</span>
           <h2>501 (Double-out)</h2>
           <p>
@@ -278,13 +284,19 @@
           </p>
         </a>
 
-        <a class="card" href="/play/x01?start=301&double_out=1">
+        <a
+          class="card"
+          href="/play/x01?start=301&doubleOut=true{% if is_admin %}&admin=1{% endif %}"
+        >
           <span class="pill">x01</span>
           <h2>301 (Double-out)</h2>
           <p>Shorter x01 game. Same double-out finish.</p>
         </a>
 
-        <a class="card" href="/play/x01?start=701&double_out=1">
+        <a
+          class="card"
+          href="/play/x01?start=701&doubleOut=true{% if is_admin %}&admin=1{% endif %}"
+        >
           <span class="pill">x01</span>
           <h2>701 (Double-out)</h2>
           <p>Longer x01 game for teams or practice sessions.</p>

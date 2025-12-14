@@ -1155,8 +1155,6 @@ window.addEventListener("DOMContentLoaded", () => {
   hookCalibrationPanel();
   drawFade();
   initSfx();
-});
-window.addEventListener("DOMContentLoaded", () => {
   const s = document.getElementById("btn-start");
   const r = document.getElementById("btn-reset");
   const u = document.getElementById("btn-undo");

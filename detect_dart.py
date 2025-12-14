@@ -83,6 +83,14 @@ DIFF_BLUR_KSIZE = 9
 DIFF_THRESHOLD = 25
 MIN_BLOB_AREA = 30
 
+# Tip-biased edge-diff tuning (no ML, single before/after)
+HP_BLUR_KSIZE = 41          # large blur to remove low-frequency illumination changes
+CANNY_LOW = 40              # edge thresholds for high-pass diff
+CANNY_HIGH = 120
+EDGE_DILATE_ITERS = 1       # slightly thicken edges so we get a stable point
+MIN_EDGE_PIXELS = 25        # minimum edge pixels to accept a detection
+TIP_K_CLOSEST = 25          # average of K most-inward edge pixels
+
 
 def sector_index_from_angle(angle: float) -> int:
     """Match the JS sector indexing logic."""
@@ -154,60 +162,54 @@ def load_image(path: str):
 
 
 def preprocess_for_diff(img):
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    gray = cv2.GaussianBlur(gray, (DIFF_BLUR_KSIZE, DIFF_BLUR_KSIZE), 0)
-    return gray
+    # Keep this light; we do the heavy blurs on the diff image so we don’t erase the tip.
+    return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
 
 def find_dart_center(before_img, after_img):
     g_before = preprocess_for_diff(before_img)
     g_after = preprocess_for_diff(after_img)
 
-    # Highlight areas that became darker in the AFTER frame
-    delta = cv2.subtract(g_before, g_after)
-    _, mask = cv2.threshold(delta, DIFF_THRESHOLD, 255, cv2.THRESH_BINARY)
+    # 1) Absolute difference (captures both darker and brighter changes)
+    diff = cv2.absdiff(g_before, g_after)
 
-    kernel = np.ones((3, 3), np.uint8)
-    mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel, iterations=1)
-    mask = cv2.dilate(mask, kernel, iterations=1)
+    # 2) High-pass the diff to reduce projector/illumination drift.
+    #    Remove low-frequency changes (like soft shadows / exposure) while keeping sharp structure (dart edges).
+    hp = diff.astype(np.float32) - cv2.GaussianBlur(diff, (HP_BLUR_KSIZE, HP_BLUR_KSIZE), 0).astype(np.float32)
+    hp = np.clip(hp, 0, 255).astype(np.uint8)
 
-    # Restrict to plausible board area
-    h, w = mask.shape
+    # 3) Restrict to plausible board area early (prevents off-board noise from winning).
+    h, w = hp.shape
     yy, xx = np.mgrid[0:h, 0:w]
     dx = xx - BOARD_CX
     dy = yy - BOARD_CY
     r = np.sqrt(dx * dx + dy * dy)
     board_mask = (r <= BOARD_RADIUS * 1.1)
-    mask = np.where(board_mask, mask, 0).astype(np.uint8)
+    hp = np.where(board_mask, hp, 0).astype(np.uint8)
 
-    # Connected components so we can isolate the dart blob
-    num, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
-    if num <= 1:
-        return None, mask
+    # 4) Edges of the high-pass diff. This suppresses “fat” blobs from flights/shadows
+    #    and prefers sharp boundaries (shaft/tip/wire).
+    edges = cv2.Canny(hp, CANNY_LOW, CANNY_HIGH)
 
-    # pick largest component (ignore background label 0)
-    areas = stats[1:, cv2.CC_STAT_AREA]
-    best_i = int(np.argmax(areas)) + 1
-    if stats[best_i, cv2.CC_STAT_AREA] < MIN_BLOB_AREA:
-        return None, mask
+    if EDGE_DILATE_ITERS > 0:
+        kernel = np.ones((3, 3), np.uint8)
+        edges = cv2.dilate(edges, kernel, iterations=EDGE_DILATE_ITERS)
 
-    ys, xs = np.where(labels == best_i)
-    if len(xs) < 10:
-        return None, mask
+    ys, xs = np.where(edges > 0)
+    if len(xs) < MIN_EDGE_PIXELS:
+        return None, edges
 
     coords = np.column_stack((xs, ys)).astype(np.float32)
 
-    # Tip heuristic (robust): pick the blob pixel(s) closest to the board centre.
-    # This directly uses the constraint: flight is always further from centre than the tip.
+    # 5) Tip heuristic: choose the most inward edge pixels (closest to board centre)
     c = np.array([BOARD_CX, BOARD_CY], dtype=np.float32)
     d2 = np.sum((coords - c) ** 2, axis=1)
 
-    # Average a small set of the closest pixels to reduce noise.
-    k = min(20, len(d2))
+    k = min(TIP_K_CLOSEST, len(d2))
     idxs = np.argpartition(d2, k - 1)[:k]
     tip = coords[idxs].mean(axis=0)
 
-    return (float(tip[0]), float(tip[1])), mask
+    return (float(tip[0]), float(tip[1])), edges
 
 
 def detect_impact(before_img, after_img):
