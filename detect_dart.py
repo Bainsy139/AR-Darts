@@ -70,10 +70,10 @@ SRC_POINTS = np.float32([
 # Target points: where those 4 points would be on a perfect circle
 # centred at (BOARD_CX, BOARD_CY) with radius BOARD_RADIUS.
 DST_POINTS = np.float32([
-    [BOARD_CX,              BOARD_CY - BOARD_RADIUS],  # top
-    [BOARD_CX + BOARD_RADIUS, BOARD_CY],               # right
-    [BOARD_CX,              BOARD_CY + BOARD_RADIUS],  # bottom
-    [BOARD_CX - BOARD_RADIUS, BOARD_CY],               # left
+    [BOARD_CX,               BOARD_CY - BOARD_RADIUS],  # top
+    [BOARD_CX + BOARD_RADIUS, BOARD_CY],                # right
+    [BOARD_CX,               BOARD_CY + BOARD_RADIUS],  # bottom
+    [BOARD_CX - BOARD_RADIUS, BOARD_CY],                # left
 ])
 
 WARP_MATRIX = cv2.getPerspectiveTransform(SRC_POINTS, DST_POINTS)
@@ -181,27 +181,62 @@ def find_dart_center(before_img, after_img):
     board_mask = (r <= BOARD_RADIUS * 1.1)
     mask = np.where(board_mask, mask, 0).astype(np.uint8)
 
-    # Extract all candidate pixels
-    ys, xs = np.where(mask == 255)
-    if len(xs) == 0:
+    # Pick the dominant connected component (single-dart scenes)
+    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    if num_labels <= 1:
         return None, mask
+
+    areas = stats[:, cv2.CC_STAT_AREA].copy()
+    areas[0] = 0  # background
+    best_label = int(np.argmax(areas))
+    best_area = int(areas[best_label])
+    if best_area < MIN_BLOB_AREA:
+        return None, mask
+
+    comp_mask = (labels == best_label).astype(np.uint8) * 255
+
+    ys, xs = np.where(comp_mask == 255)
+    if len(xs) < 2:
+        return None, comp_mask
 
     coords = np.column_stack((xs, ys)).astype(np.float32)
 
-    # Distance to board centre
-    dx = coords[:, 0] - BOARD_CX
-    dy = coords[:, 1] - BOARD_CY
-    d2 = dx * dx + dy * dy
+    # Fit a line to the component (major axis) and take the inward endpoint.
+    # This is robust when the blob is mostly the flight/shaft: the inward end is closest to the board centre.
+    pts = coords.reshape(-1, 1, 2)
+    vx, vy, x0, y0 = cv2.fitLine(pts, cv2.DIST_L2, 0, 0.01, 0.01)
+    vx = float(vx)
+    vy = float(vy)
+    x0 = float(x0)
+    y0 = float(y0)
 
-    # Take K closest pixels to centre and average them
-    K = int(max(1, min(25, len(d2))))
-    idx = np.argpartition(d2, K - 1)[:K]
-    tip_pt = np.mean(coords[idx], axis=0)
+    # Normalize direction
+    norm = math.hypot(vx, vy)
+    if norm < 1e-6:
+        return None, comp_mask
+    vx /= norm
+    vy /= norm
+
+    # Project points onto the fitted line direction and take extremes as endpoints
+    dxp = coords[:, 0] - x0
+    dyp = coords[:, 1] - y0
+    t = dxp * vx + dyp * vy
+
+    i_min = int(np.argmin(t))
+    i_max = int(np.argmax(t))
+    p_min = coords[i_min]
+    p_max = coords[i_max]
+
+    # Choose the endpoint closer to the board centre as the tip
+    d_min = (p_min[0] - BOARD_CX) ** 2 + (p_min[1] - BOARD_CY) ** 2
+    d_max = (p_max[0] - BOARD_CX) ** 2 + (p_max[1] - BOARD_CY) ** 2
+
+    tip_pt = p_min if d_min < d_max else p_max
 
     tip_x = float(tip_pt[0])
     tip_y = float(tip_pt[1])
 
-    return (tip_x, tip_y), mask
+    return (tip_x, tip_y), comp_mask
 
 
 def detect_impact(before_img, after_img):
@@ -295,7 +330,7 @@ def main():
     before = load_image(before_path)
     after = load_image(after_path)
 
-    center, mask = find_dart_center(before, after)
+    center, _ = find_dart_center(before, after)
 
     if center is None:
         print("No clear dart impact detected.")

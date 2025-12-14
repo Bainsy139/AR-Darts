@@ -211,14 +211,14 @@ input[type="range"] {
   padding: 12px 14px;
   border-radius: 12px;
   /* player card colours here */
-  background: radial-gradient(#ff4df9, #00aaff);
+  background: linear-gradient(#ff4df9, #00aaff);
   border: 2px solid rgba(8, 214, 255, 1);
   box-shadow: 0 0 24px rgb(8, 214, 255) inset, 0 6px 18px rgb(255, 255, 255);
   backdrop-filter: blur(2.5px);
   -webkit-backdrop-filter: blur(2.5px);
   /* this is the text colour */
   color: #ffffff;
-  text-shadow: 0 0 2px rgb(255, 255, 255);
+  text-shadow: 0 0 1px rgb(255, 255, 255);
   pointer-events: none;
 }
 
