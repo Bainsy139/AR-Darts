@@ -591,27 +591,24 @@ def main():
             center = (int(round(BOARD_CX)), int(round(BOARD_CY)))
             tip_point = None
             if hit_point is not None and edges is not None:
-                # Find all edge pixels
-                ys, xs = np.where(edges > 0)
-                edge_pixels = list(zip(xs, ys))
-                # Find the northernmost pixel (minimum y)
-                if edge_pixels:
-                    northernmost = min(edge_pixels, key=lambda p: p[1])
-                    tip_x, tip_y = northernmost
-                    tip_point = (int(tip_x), int(tip_y))
-                    # Logging before drawing the red circle
-                    print("Edge pixels found:", len(edge_pixels))
-                    print("Northernmost (tip) pixel:", tip_point)
-                    # Draw the red circle for the detected dart tip
-                    cv2.circle(after_img, tip_point, 8, (0, 0, 255), 2)
+                # Find contours of the detected dart blob
+                contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                if contours:
+                    # Use the largest contour
+                    contour = max(contours, key=cv2.contourArea)
+                    # Select the topmost pixel (lowest y-value) in the contour
+                    tip_point = min(contour, key=lambda point: point[0][1])  # point is [[x, y]]
+                    tip_xy = tuple(tip_point[0])
+                    # Draw a red circle at the estimated tip
+                    cv2.circle(after_img, tip_xy, 8, (0, 0, 255), 2)
                     # Annotate detected sector and distance
-                    angle_deg = math.degrees(math.atan2(center[1] - tip_point[1], tip_point[0] - center[0])) % 360
-                    distance = math.hypot(tip_point[0] - center[0], tip_point[1] - center[1])
+                    angle_deg = math.degrees(math.atan2(center[1] - tip_xy[1], tip_xy[0] - center[0])) % 360
+                    distance = math.hypot(tip_xy[0] - center[0], tip_xy[1] - center[1])
                     SECTOR_ANGLE = 18
                     sector_index = int((angle_deg - 5) % 360 // SECTOR_ANGLE)
                     sector = SECTORS[sector_index]
                     label = f"{sector} ({distance:.0f}px)"
-                    cv2.putText(after_img, label, (tip_point[0] + 10, tip_point[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+                    cv2.putText(after_img, label, (tip_xy[0] + 10, tip_xy[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
             # Draw sector lines in blue
             SECTOR_ANGLE = 18
             for i in range(20):
@@ -733,8 +730,8 @@ def estimate_tip(before_img, after_img, debug_img=None):
     edge_pixels = list(zip(xs, ys))
     # Select the edge pixel with the smallest y-coordinate (topmost pixel)
     if len(edge_pixels) > 0:
-        topmost_point = min(edge_pixels, key=lambda p: p[1])
-        tip_x, tip_y = topmost_point
+        tip_pixel = min(edge_pixels, key=lambda p: p[1])
+        tip_x, tip_y = tip_pixel
         print(f"[DEBUG] Topmost edge pixel selected as tip: ({tip_x:.1f}, {tip_y:.1f})")
         return (float(tip_x), float(tip_y))
     else:
