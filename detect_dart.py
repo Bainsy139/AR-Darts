@@ -56,7 +56,6 @@ def ring_from_radius_frac(r_frac: float) -> str:
     # Beyond board = miss
     return "miss"
 
-# Sector order (clockwise from 20 at 12 o'clock)
 SECTORS = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17,
            3, 19, 7, 16, 8, 11, 14, 9, 12, 5]
 
@@ -137,21 +136,23 @@ def classify_hit_with_debug(x: float, y: float):
 
     Returns a dict with keys: ring, sector, r_frac, angle_deg.
     """
-    r_frac, angle = pixel_to_polar(x, y)
-    angle_deg = math.degrees(angle)
+    r_frac, angle_radians = pixel_to_polar(x, y)
+    angle_degrees = math.degrees(angle_radians) % 360
 
     ring = ring_from_radius_frac(r_frac)
     if ring == "miss":
         sector = None
     else:
-        sec_idx = sector_index_from_angle(angle)
+        sec_idx = sector_index_from_angle(angle_radians)
         sector = SECTORS[sec_idx]
+
+    print(f"[DEBUG] Tip at ({x:.1f}, {y:.1f}) => Angle: {angle_degrees:.2f}° => Sector: {sector}")
 
     return {
         "ring": ring,
         "sector": sector,
         "r_frac": r_frac,
-        "angle_deg": angle_deg,
+        "angle_deg": angle_degrees,
     }
 
 
@@ -162,6 +163,7 @@ def classify_hit(x: float, y: float):
     """
     info = classify_hit_with_debug(x, y)
     print(f"[DEBUG] r_frac={info['r_frac']:.3f}, angle_deg={info['angle_deg']:.1f}")
+    print(f"[HIT] Estimated sector: {info['sector']}, type: {info['ring']}")
     return info["ring"], info["sector"]
 
 
@@ -452,6 +454,7 @@ def detect_impact(before_img, after_img):
     info = classify_hit_with_debug(cx, cy)
     info["x"] = cx
     info["y"] = cy
+    print(f"[HIT] Estimated sector: {info['sector']}, type: {info['ring']}")
 
     # If it landed off the board, treat as miss
     if info["ring"] == "miss" or info["sector"] is None:
@@ -683,3 +686,25 @@ def estimate_tip(before_img, after_img, debug_img=None):
 
 if __name__ == "__main__":
     main()
+# --- Utility: get_board_sector_and_ring with rotation offset correction ---
+def get_board_sector_and_ring(x, y, board_center=(960, 540)):
+    """
+    Given (x, y) pixel coordinates and the board center, return (sector, ring).
+    Applies a +5 degree rotation correction after angle calculation.
+    """
+    dx = x - board_center[0]
+    dy = y - board_center[1]
+    r = math.hypot(dx, dy)
+    r_frac = r / max(1.0, BOARD_RADIUS)
+    angle = math.degrees(math.atan2(dy, dx))
+    angle = (angle + 360 + 5) % 360  # apply rotation offset
+    # Determine ring
+    ring = ring_from_radius_frac(r_frac)
+    # Determine sector
+    if ring == "miss":
+        sector = None
+    else:
+        # Sector 0 (20) is at 270°, so shift by -90°
+        sector_idx = int(((angle - 90) % 360) // 18)
+        sector = SECTORS[sector_idx]
+    return sector, ring
