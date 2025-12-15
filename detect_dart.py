@@ -591,14 +591,13 @@ def main():
             center = (int(round(BOARD_CX)), int(round(BOARD_CY)))
             tip_point = None
             if hit_point is not None and edges is not None:
-                # Find contours of the detected dart blob
-                contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-                if contours:
-                    # Use the largest contour
-                    contour = max(contours, key=cv2.contourArea)
-                    # Select the topmost pixel (lowest y-value) in the contour
-                    tip_point = min(contour, key=lambda point: point[0][1])  # point is [[x, y]]
-                    tip_xy = tuple(tip_point[0])
+                # Find edge pixels (nonzero in edges)
+                ys, xs = np.where(edges > 0)
+                tip_candidates = list(zip(xs, ys))
+                if tip_candidates:
+                    # Get topmost candidate (minimum y-value)
+                    topmost_point = min(tip_candidates, key=lambda p: p[1])
+                    tip_xy = (int(topmost_point[0]), int(topmost_point[1]))
                     # Draw a red circle at the estimated tip
                     cv2.circle(after_img, tip_xy, 8, (0, 0, 255), 2)
                     # Annotate detected sector and distance
