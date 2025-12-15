@@ -23,7 +23,7 @@ BOARD_CY = 625    # vertical centre of board
 BOARD_RADIUS = 130  # pixels from centre to outer double ring edge (tweak if overlay drifts)
 
 # Angle offset to correct sector mapping (rotate counter-clockwise)
-ANGLE_OFFSET_DEGREES = -27  # Rotate counter-clockwise to correct sector mapping
+ANGLE_OFFSET_DEGREES = 0  # Rotate counter-clockwise to correct sector mapping
 
 # Rotation offset in degrees to align sector 20 to the top
 # Previously -18.0, but tests show we were off by one full wedge (18°).
