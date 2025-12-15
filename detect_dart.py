@@ -3,8 +3,7 @@ import math
 import cv2
 import numpy as np
 
-# Add import for estimate_tip
-from estimate_tip import estimate_tip
+
 
 # Try to import ArUco for optional marker-based calibration
 try:
@@ -613,6 +612,18 @@ def main():
 
         print(f"Detected impact at ({cx:.1f}, {cy:.1f}) → {label}")
 
+
+
+def estimate_tip(before_img, after_img, debug_img=None):
+    """
+    Estimate the dart tip location using the same logic as find_dart_center,
+    but returns only the tip coordinates (x, y) or None.
+    Optionally draws debug info on debug_img if provided.
+    """
+    result, _ = find_dart_center(before_img, after_img, debug_img)
+    if result is None:
+        return None
+    return result
 
 if __name__ == "__main__":
     main()
