@@ -584,37 +584,34 @@ def main():
             warped_before = cv2.warpPerspective(before, M, (w, h))
             warped_after = cv2.warpPerspective(after, M, (w, h))
             warped_overlay = cv2.warpPerspective(overlay, M, (w, h))
-            # Use estimate_tip with warped images
-            hit_point = estimate_tip(warped_before, warped_after, warped_overlay)
+            # Use find_dart_center to get edge pixels
+            hit_point, edges = find_dart_center(warped_before, warped_after, warped_overlay)
             print(f"DEBUG: Estimated tip @ {hit_point}")
-            # Draw overlay with hit and sector lines and annotation
             after_img = warped_after.copy()
             center = (int(round(BOARD_CX)), int(round(BOARD_CY)))
-            if hit_point is not None:
-                # Estimate the tip based on offset from the flight/shaft center along the dart direction.
-                cx, cy = hit_point
-                # For this overlay, we assume the direction is from board center to detected tip.
-                angle = math.atan2(cy - center[1], cx - center[0])
-                # Increase the offset distance by 15 pixels (was 60, now 75)
-                offset_distance = 75
-                tip_x = cx - offset_distance * math.cos(angle)
-                tip_y = cy - offset_distance * math.sin(angle)
-                tip = (int(round(tip_x)), int(round(tip_y)))
-                # Logging before drawing the red circle
-                print("Blob centroid (pre-offset):", (cx, cy))
-                print("Estimated tip position (pre-warp):", (tip_x, tip_y))
-                print("Final projected tip position (post-warp):", tip)
-                # Draw the red circle for the estimated dart tip
-                cv2.circle(after_img, tip, 8, (0, 0, 255), 2)
-                # Annotate detected sector and distance
-                angle_deg = math.degrees(math.atan2(center[1] - tip[1], tip[0] - center[0])) % 360
-                distance = math.hypot(tip[0] - center[0], tip[1] - center[1])
-                # Apply 5° anticlockwise correction for sector detection
-                SECTOR_ANGLE = 18
-                sector_index = int((angle_deg - 5) % 360 // SECTOR_ANGLE)
-                sector = SECTORS[sector_index]
-                label = f"{sector} ({distance:.0f}px)"
-                cv2.putText(after_img, label, (tip[0] + 10, tip[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+            tip_point = None
+            if hit_point is not None and edges is not None:
+                # Find all edge pixels
+                ys, xs = np.where(edges > 0)
+                edge_pixels = list(zip(xs, ys))
+                # Find the northernmost pixel (minimum y)
+                if edge_pixels:
+                    northernmost = min(edge_pixels, key=lambda p: p[1])
+                    tip_x, tip_y = northernmost
+                    tip_point = (int(tip_x), int(tip_y))
+                    # Logging before drawing the red circle
+                    print("Edge pixels found:", len(edge_pixels))
+                    print("Northernmost (tip) pixel:", tip_point)
+                    # Draw the red circle for the detected dart tip
+                    cv2.circle(after_img, tip_point, 8, (0, 0, 255), 2)
+                    # Annotate detected sector and distance
+                    angle_deg = math.degrees(math.atan2(center[1] - tip_point[1], tip_point[0] - center[0])) % 360
+                    distance = math.hypot(tip_point[0] - center[0], tip_point[1] - center[1])
+                    SECTOR_ANGLE = 18
+                    sector_index = int((angle_deg - 5) % 360 // SECTOR_ANGLE)
+                    sector = SECTORS[sector_index]
+                    label = f"{sector} ({distance:.0f}px)"
+                    cv2.putText(after_img, label, (tip_point[0] + 10, tip_point[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
             # Draw sector lines in blue
             SECTOR_ANGLE = 18
             for i in range(20):
