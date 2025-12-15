@@ -719,47 +719,27 @@ def estimate_tip(before_img, after_img, debug_img=None):
     This function also rotates the inferred dart vector by -5 degrees (counter-clockwise)
     before estimating the tip location.
     """
-    result, _ = find_dart_center(before_img, after_img, debug_img)
-    if result is None:
-        return None
-
-    # The blob centroid (flight/shaft center) is result
-    blob_centroid = np.array(result, dtype=np.float32)
-    # The bull point (board centre)
-    bull_point = np.array([BOARD_CX, BOARD_CY], dtype=np.float32)
-
-    # --- Begin warp-based tip estimation ---
-    # Compute warp and inverse warp matrices
-    matrix = None
-    inverse_matrix = None
-    if USE_WARP:
-        # Try to use ArUco if available, else fallback to default
-        M = _compute_warp_from_aruco(before_img)
-        if M is None:
-            M = cv2.getPerspectiveTransform(DEFAULT_SRC_POINTS, DST_POINTS)
-        matrix = M
-        inverse_matrix = np.linalg.inv(M)
+    # Use the same preprocessing as find_dart_center to compute the warped images and edges
+    # Compute warp matrix (possibly from ArUco)
+    M = _compute_warp_from_aruco(before_img)
+    if M is None:
+        M = cv2.getPerspectiveTransform(DEFAULT_SRC_POINTS, DST_POINTS)
+    h, w = before_img.shape[:2]
+    warped_before = cv2.warpPerspective(before_img, M, (w, h))
+    warped_after = cv2.warpPerspective(after_img, M, (w, h))
+    # Find edge pixels from the warped images
+    _, edges = find_dart_center(warped_before, warped_after, debug_img)
+    ys, xs = np.where(edges > 0) if edges is not None else ([], [])
+    edge_pixels = list(zip(xs, ys))
+    # Select the edge pixel with the smallest y-coordinate (topmost pixel)
+    if len(edge_pixels) > 0:
+        topmost_point = min(edge_pixels, key=lambda p: p[1])
+        tip_x, tip_y = topmost_point
+        print(f"[DEBUG] Topmost edge pixel selected as tip: ({tip_x:.1f}, {tip_y:.1f})")
+        return (float(tip_x), float(tip_y))
     else:
-        # Identity if not using warp
-        matrix = np.eye(3, dtype=np.float32)
-        inverse_matrix = np.eye(3, dtype=np.float32)
-
-    # Warp the points into top-down space
-    warped_blob = cv2.perspectiveTransform(np.array([[blob_centroid]], dtype=np.float32), matrix)
-    warped_bull = cv2.perspectiveTransform(np.array([[bull_point]], dtype=np.float32), matrix)
-
-    # Calculate offset vector in warp space
-    vector_to_bull = warped_bull[0][0] - warped_blob[0][0]
-    unit_vector = vector_to_bull / np.linalg.norm(vector_to_bull)
-
-    # Estimate tip position in warp space
-    estimated_tip_warp = warped_blob[0][0] + unit_vector * 60  # 60px toward bull
-
-    # Convert tip back to original image space
-    estimated_tip_original = cv2.perspectiveTransform(np.array([[estimated_tip_warp]], dtype=np.float32), inverse_matrix)[0][0]
-    # --- End warp-based tip estimation ---
-
-    return (float(estimated_tip_original[0]), float(estimated_tip_original[1]))
+        print("[ERROR] No edge pixels found.")
+        return None
 
 if __name__ == "__main__":
     main()
