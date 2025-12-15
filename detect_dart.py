@@ -22,6 +22,9 @@ BOARD_CX = 1042   # horizontal centre of board
 BOARD_CY = 625    # vertical centre of board
 BOARD_RADIUS = 130  # pixels from centre to outer double ring edge (tweak if overlay drifts)
 
+# Angle offset to correct sector mapping (rotate counter-clockwise)
+ANGLE_OFFSET_DEGREES = -27  # Rotate counter-clockwise to correct sector mapping
+
 # Rotation offset in degrees to align sector 20 to the top
 # Previously -18.0, but tests show we were off by one full wedge (18°).
 # Using 0.0 brings 20/1/5/19/15 etc into the correct sectors.
@@ -690,14 +693,14 @@ if __name__ == "__main__":
 def get_board_sector_and_ring(x, y, board_center=(960, 540)):
     """
     Given (x, y) pixel coordinates and the board center, return (sector, ring).
-    Applies a +5 degree rotation correction after angle calculation.
+    Applies a -27 degree rotation correction after angle calculation.
     """
     dx = x - board_center[0]
     dy = y - board_center[1]
     r = math.hypot(dx, dy)
     r_frac = r / max(1.0, BOARD_RADIUS)
-    angle = math.degrees(math.atan2(dy, dx))
-    angle = (angle + 360 + 5) % 360  # apply rotation offset
+    # Apply angle offset for sector mapping
+    angle = (math.degrees(math.atan2(dy, dx)) + ANGLE_OFFSET_DEGREES + 360) % 360
     # Determine ring
     ring = ring_from_radius_frac(r_frac)
     # Determine sector
