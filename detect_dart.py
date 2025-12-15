@@ -95,7 +95,7 @@ DST_POINTS = np.float32([
 WARP_MATRIX = None
 
 # Threshold tuning
-DIFF_BLUR_KSIZE = 9
+DIFF_BLUR_KSIZE = 0
 DIFF_THRESHOLD = 15
 MIN_BLOB_AREA = 10
 
@@ -113,7 +113,7 @@ MIN_RAY_PIXELS = 15         # min pixels on that ray band to trust the ray-based
 
 # Tip selection tuning
 TIP_NUDGE_PX = 2            # after selecting the inward endpoint, nudge slightly further toward board centre
-COMP_DILATE_ITERS = 2       # dilate the coarse diff blob so edge pixels from the dart are included
+COMP_DILATE_ITERS = 0       # dilate the coarse diff blob so edge pixels from the dart are included
 
 def sector_index_from_angle(angle: float) -> int:
     """Match the JS sector indexing logic."""
@@ -326,27 +326,44 @@ def find_dart_center(before_img, after_img, debug_img=None):
     diff = np.where(board_mask, diff, 0).astype(np.uint8)
 
     # 3) Coarse blob from diff to localise the dart change.
-    #    This is intentionally "fat" and tolerant; we only use it to gate edge pixels later.
-    diff_blur = cv2.GaussianBlur(diff, (DIFF_BLUR_KSIZE, DIFF_BLUR_KSIZE), 0)
-    _, diff_bin = cv2.threshold(diff_blur, DIFF_THRESHOLD, 255, cv2.THRESH_BINARY)
+    # IMPORTANT: do NOT blur the diff here.
+    # Blurring + MORPH_OPEN wipes thin dart pixels (shaft/flight), which prevents the "topmost pixel" rule.
+    diff_bin = (diff > DIFF_THRESHOLD).astype(np.uint8) * 255
 
-    # Close then open (fill gaps, remove speckle)
-    k = np.ones((5, 5), np.uint8)
+    # Fill small gaps without deleting thin structures
+    k = np.ones((3, 3), np.uint8)
     diff_bin = cv2.morphologyEx(diff_bin, cv2.MORPH_CLOSE, k, iterations=1)
-    diff_bin = cv2.morphologyEx(diff_bin, cv2.MORPH_OPEN, k, iterations=1)
 
     num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(diff_bin, connectivity=8)
 
-    # Pick the largest component inside the board (ignore background label 0)
+    # Pick the component whose TOPMOST pixel is highest in the image (smallest Y).
+    # This avoids selecting a big projection/board-change blob near the centre when the dart pixels are thinner.
     best_label = None
+    best_top_y = None
     best_area = 0
+
     for lab in range(1, num_labels):
         area = int(stats[lab, cv2.CC_STAT_AREA])
         if area < MIN_BLOB_AREA:
             continue
-        if area > best_area:
-            best_area = area
+
+        top_y = int(stats[lab, cv2.CC_STAT_TOP])
+
+        if best_label is None:
             best_label = lab
+            best_top_y = top_y
+            best_area = area
+            continue
+
+        # Primary: smallest top_y wins
+        if top_y < best_top_y:
+            best_label = lab
+            best_top_y = top_y
+            best_area = area
+        # Secondary: if same top_y, larger area wins
+        elif top_y == best_top_y and area > best_area:
+            best_label = lab
+            best_area = area
 
     if best_label is None:
         # Still return an image for debug callers
