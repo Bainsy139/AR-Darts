@@ -600,6 +600,10 @@ def main():
                 tip_x = cx - offset_distance * math.cos(angle)
                 tip_y = cy - offset_distance * math.sin(angle)
                 tip = (int(round(tip_x)), int(round(tip_y)))
+                # Logging before drawing the red circle
+                print("Blob centroid (pre-offset):", (cx, cy))
+                print("Estimated tip position (pre-warp):", (tip_x, tip_y))
+                print("Final projected tip position (post-warp):", tip)
                 # Draw the red circle for the estimated dart tip
                 cv2.circle(after_img, tip, 8, (0, 0, 255), 2)
                 # Annotate detected sector and distance
