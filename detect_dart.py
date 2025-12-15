@@ -725,17 +725,25 @@ def estimate_tip(before_img, after_img, debug_img=None):
     warped_after = cv2.warpPerspective(after_img, M, (w, h))
     # Find edge pixels from the warped images
     _, edges = find_dart_center(warped_before, warped_after, debug_img)
-    ys, xs = np.where(edges > 0) if edges is not None else ([], [])
-    edge_pixels = list(zip(xs, ys))
-    # Select the edge pixel with the smallest y-coordinate (topmost pixel)
+    # Find coordinates of all edge pixels
+    if edges is not None:
+        edge_pixels = np.column_stack(np.where(edges > 0))
+    else:
+        edge_pixels = []
+    # Sort edge pixels by y-coordinate (ascending = top of image)
     if len(edge_pixels) > 0:
-        tip_pixel = min(edge_pixels, key=lambda p: p[1])
-        tip_x, tip_y = tip_pixel
-        print(f"[DEBUG] Topmost edge pixel selected as tip: ({tip_x:.1f}, {tip_y:.1f})")
+        edge_pixels = sorted(edge_pixels, key=lambda p: p[0])
+        # Use the topmost pixel as the estimated tip
+        tip_y, tip_x = edge_pixels[0]
+        estimated_tip = (int(tip_x), int(tip_y))
+        print(f"[DEBUG] Topmost edge pixel selected as tip: ({tip_x}, {tip_y})")
         return (float(tip_x), float(tip_y))
     else:
-        print("[ERROR] No edge pixels found.")
-        return None
+        # fallback: use board center
+        center_x = int(round(BOARD_CX))
+        center_y = int(round(BOARD_CY))
+        print("[ERROR] No edge pixels found. Falling back to board center.")
+        return (float(center_x), float(center_y))
 
 if __name__ == "__main__":
     main()
