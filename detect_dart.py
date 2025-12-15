@@ -3,6 +3,9 @@ import math
 import cv2
 import numpy as np
 
+# Add import for estimate_tip
+from estimate_tip import estimate_tip
+
 # Try to import ArUco for optional marker-based calibration
 try:
     import cv2.aruco as aruco
@@ -546,14 +549,35 @@ def main():
         after_path = sys.argv[3]
         out_path = sys.argv[4]
 
-        before = load_image(before_path)
-        after = load_image(after_path)
+        # Load images without warp for ArUco detection
+        before = cv2.imread(before_path, cv2.IMREAD_COLOR)
+        after = cv2.imread(after_path, cv2.IMREAD_COLOR)
+        overlay = cv2.imread(after_path, cv2.IMREAD_COLOR)
 
-        center, _ = find_dart_center(before, after)
-        print(f"DEBUG: Estimated tip @ {center}")
-        draw_debug_overlay_with_hit(after_path, center, out_path)
-        print(f"Overlay+hit written to {out_path}")
-        sys.exit(0)
+        # Apply camera orientation correction if needed
+        if CAMERA_UPSIDE_DOWN:
+            before = cv2.rotate(before, cv2.ROTATE_180)
+            after = cv2.rotate(after, cv2.ROTATE_180)
+            overlay = cv2.rotate(overlay, cv2.ROTATE_180)
+
+        # Compute warp matrix (possibly from ArUco)
+        h, w = before.shape[:2]
+        M = _compute_warp_from_aruco(before)
+        if M is None:
+            M = cv2.getPerspectiveTransform(DEFAULT_SRC_POINTS, DST_POINTS)
+        if M is not None:
+            warped_before = cv2.warpPerspective(before, M, (w, h))
+            warped_after = cv2.warpPerspective(after, M, (w, h))
+            warped_overlay = cv2.warpPerspective(overlay, M, (w, h))
+            # Use estimate_tip with warped images
+            hit_point = estimate_tip(warped_before, warped_after, warped_overlay)
+            print(f"DEBUG: Estimated tip @ {hit_point}")
+            draw_debug_overlay_with_hit(after_path, hit_point, out_path)
+            print(f"Overlay+hit written to {out_path}")
+            sys.exit(0)
+        else:
+            print("Could not compute perspective warp, aborting overlayhit.")
+            sys.exit(1)
 
     # Default CLI mode:
     #   python3 detect_dart.py BEFORE.jpg AFTER.jpg
