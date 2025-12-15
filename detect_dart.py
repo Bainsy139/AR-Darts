@@ -722,12 +722,43 @@ def estimate_tip(before_img, after_img, debug_img=None):
     if result is None:
         return None
 
-    # Use a simple fixed Y-offset from the detected blob centroid (in warped coordinates)
-    x, y = result
-    TIP_OFFSET_PIXELS = 60
-    tip_x = x
-    tip_y = y - TIP_OFFSET_PIXELS
-    return (float(tip_x), float(tip_y))
+    # The blob centroid (flight/shaft center) is result
+    blob_centroid = np.array(result, dtype=np.float32)
+    # The bull point (board centre)
+    bull_point = np.array([BOARD_CX, BOARD_CY], dtype=np.float32)
+
+    # --- Begin warp-based tip estimation ---
+    # Compute warp and inverse warp matrices
+    matrix = None
+    inverse_matrix = None
+    if USE_WARP:
+        # Try to use ArUco if available, else fallback to default
+        M = _compute_warp_from_aruco(before_img)
+        if M is None:
+            M = cv2.getPerspectiveTransform(DEFAULT_SRC_POINTS, DST_POINTS)
+        matrix = M
+        inverse_matrix = np.linalg.inv(M)
+    else:
+        # Identity if not using warp
+        matrix = np.eye(3, dtype=np.float32)
+        inverse_matrix = np.eye(3, dtype=np.float32)
+
+    # Warp the points into top-down space
+    warped_blob = cv2.perspectiveTransform(np.array([[blob_centroid]], dtype=np.float32), matrix)
+    warped_bull = cv2.perspectiveTransform(np.array([[bull_point]], dtype=np.float32), matrix)
+
+    # Calculate offset vector in warp space
+    vector_to_bull = warped_bull[0][0] - warped_blob[0][0]
+    unit_vector = vector_to_bull / np.linalg.norm(vector_to_bull)
+
+    # Estimate tip position in warp space
+    estimated_tip_warp = warped_blob[0][0] + unit_vector * 60  # 60px toward bull
+
+    # Convert tip back to original image space
+    estimated_tip_original = cv2.perspectiveTransform(np.array([[estimated_tip_warp]], dtype=np.float32), inverse_matrix)[0][0]
+    # --- End warp-based tip estimation ---
+
+    return (float(estimated_tip_original[0]), float(estimated_tip_original[1]))
 
 if __name__ == "__main__":
     main()
