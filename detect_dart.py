@@ -618,6 +618,8 @@ def main():
         print("No clear dart impact detected.")
         sys.exit(0)
 
+
+        
     cx, cy = center
     ring, sector = classify_hit(cx, cy)
 
