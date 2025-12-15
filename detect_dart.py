@@ -701,6 +701,10 @@ def get_board_sector_and_ring(x, y, board_center=(960, 540)):
     r_frac = r / max(1.0, BOARD_RADIUS)
     # Apply angle offset for sector mapping
     angle = (math.degrees(math.atan2(dy, dx)) + ANGLE_OFFSET_DEGREES + 360) % 360
+    # Rotate angle 18 degrees counterclockwise before mapping to sector index
+    angle -= 18
+    if angle < 0:
+        angle += 360
     # Determine ring
     ring = ring_from_radius_frac(r_frac)
     # Determine sector
