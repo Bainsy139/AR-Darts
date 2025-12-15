@@ -593,6 +593,25 @@ def main():
     before = load_image(before_path)
     after = load_image(after_path)
 
+    # --- ARUCO MARKER DETECTION (for debug) ---
+    try:
+        import cv2.aruco as aruco
+        aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
+        parameters = aruco.DetectorParameters_create()
+        # after is still BGR at this point
+        corners, ids, rejected = aruco.detectMarkers(after, aruco_dict, parameters=parameters)
+
+        if ids is not None:
+            print(f"[ARUCO] Detected {len(ids)} markers with IDs: {ids.flatten()}")
+            # Draw detected markers on image
+            aruco.drawDetectedMarkers(after, corners, ids)
+        else:
+            print("[ARUCO] No markers detected.")
+        # Save the image with drawn markers
+        cv2.imwrite("aruco_debug.jpg", after)
+    except Exception as e:
+        print(f"[ARUCO] Detection error: {e}")
+
     center, _ = find_dart_center(before, after)
 
     if center is None:
