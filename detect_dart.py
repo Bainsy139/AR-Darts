@@ -302,7 +302,7 @@ def _tip_from_pca_endpoints(coords: np.ndarray, board_center: np.ndarray):
     return tip.astype(np.float32), u.astype(np.float32)
 
 
-def find_dart_center(before_img, after_img):
+def find_dart_center(before_img, after_img, debug_img=None):
     g_before = preprocess_for_diff(before_img)
     g_after = preprocess_for_diff(after_img)
 
@@ -343,9 +343,18 @@ def find_dart_center(before_img, after_img):
 
     if best_label is None:
         # Still return an image for debug callers
+        if debug_img is not None:
+            cv2.imwrite("debug_last_blob.jpg", debug_img)
         return None, diff_bin
 
     comp = (labels == best_label).astype(np.uint8) * 255
+
+    # Draw largest blob contour if requested
+    if debug_img is not None:
+        contours, _ = cv2.findContours(comp, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if contours:
+            comp_contour = max(contours, key=cv2.contourArea)
+            cv2.drawContours(debug_img, [comp_contour], -1, (0, 255, 0), 2)
 
     if COMP_DILATE_ITERS > 0:
         comp = cv2.dilate(comp, np.ones((3, 3), np.uint8), iterations=COMP_DILATE_ITERS)
@@ -366,6 +375,8 @@ def find_dart_center(before_img, after_img):
     ys, xs = np.where(edges > 0)
     print(f"[DEBUG] Found {len(xs)} edge pixels after Canny")
     if len(xs) < MIN_EDGE_PIXELS:
+        if debug_img is not None:
+            cv2.imwrite("debug_last_blob.jpg", debug_img)
         return None, edges
 
     coords = np.column_stack((xs, ys)).astype(np.float32)
@@ -406,6 +417,10 @@ def find_dart_center(before_img, after_img):
         k = min(TIP_K_CLOSEST, len(d2))
         idxs = np.argpartition(d2, k - 1)[:k]
         tip = coords[idxs].mean(axis=0)
+
+    # Draw tip if requested
+    if debug_img is not None and tip is not None:
+        cv2.circle(debug_img, (int(round(tip[0])), int(round(tip[1]))), 5, (0, 0, 255), -1)
 
     return (float(tip[0]), float(tip[1])), edges
 
