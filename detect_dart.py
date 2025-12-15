@@ -715,11 +715,36 @@ def estimate_tip(before_img, after_img, debug_img=None):
     Estimate the dart tip location using the same logic as find_dart_center,
     but returns only the tip coordinates (x, y) or None.
     Optionally draws debug info on debug_img if provided.
+    This function also rotates the inferred dart vector by -5 degrees (counter-clockwise)
+    before estimating the tip location.
     """
     result, _ = find_dart_center(before_img, after_img, debug_img)
     if result is None:
         return None
-    return result
+
+    # Compute the vector from the blob centroid to the bullseye (board center)
+    blob = np.array(result, dtype=np.float32)
+    bull = np.array([BOARD_CX, BOARD_CY], dtype=np.float32)
+    direction_vector = bull - blob
+    norm = np.linalg.norm(direction_vector)
+    if norm < 1e-6:
+        return tuple(blob)
+    direction_vector = direction_vector / norm
+
+    # Rotate the direction vector by -5 degrees (counter-clockwise)
+    angle_deg = -5
+    angle_rad = math.radians(angle_deg)
+    cos_theta = math.cos(angle_rad)
+    sin_theta = math.sin(angle_rad)
+    rotated_x = direction_vector[0] * cos_theta - direction_vector[1] * sin_theta
+    rotated_y = direction_vector[0] * sin_theta + direction_vector[1] * cos_theta
+    direction_vector = np.array([rotated_x, rotated_y])
+
+    # Offset the estimated tip along the rotated direction vector
+    # The offset distance can be tuned as needed (default: 75 px as in overlayhit)
+    offset_distance = 75
+    tip_xy = blob + direction_vector * offset_distance
+    return (float(tip_xy[0]), float(tip_xy[1]))
 
 if __name__ == "__main__":
     main()
