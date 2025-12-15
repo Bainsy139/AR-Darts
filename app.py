@@ -120,7 +120,14 @@ def detect():
         return jsonify({"ok": False, "error": "load_failed"}), 500
 
     result = detect_dart.detect_impact(before, after)
+    # Save debug overlay with hit circle
     hit_info = result.get("hit")
+    if hit_info and 'x' in hit_info and 'y' in hit_info:
+        debug_overlay = after.copy()
+        import cv2
+        cv2.circle(debug_overlay, (int(hit_info['x']), int(hit_info['y'])), 10, (0, 0, 255), 2)
+        cv2.imwrite("last_overlay_debug.jpg", debug_overlay)
+
     reason = result.get("reason")
 
     if not hit_info:
