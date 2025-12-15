@@ -434,7 +434,16 @@ def detect_impact(before_img, after_img):
       - hit: dict with ring, sector, r_frac, angle_deg, x, y
       - reason: string if no impact ("no_impact"), else None
     """
-    center, _ = find_dart_center(before_img, after_img)
+    # Apply perspective warp using ArUco if available
+    h, w = before_img.shape[:2]
+    M = _compute_warp_from_aruco(before_img)
+    if M is None:
+        M = cv2.getPerspectiveTransform(DEFAULT_SRC_POINTS, DST_POINTS)
+
+    warped_before = cv2.warpPerspective(before_img, M, (w, h))
+    warped_after = cv2.warpPerspective(after_img, M, (w, h))
+
+    center, _ = find_dart_center(warped_before, warped_after)
 
     if center is None:
         return {"hit": None, "reason": "no_impact"}
