@@ -707,7 +707,8 @@ def get_board_sector_and_ring(x, y, board_center=(960, 540)):
     if ring == "miss":
         sector = None
     else:
-        # Sector 0 (20) is at 270°, so shift by -90°
-        sector_idx = int(((angle - 90) % 360) // 18)
-        sector = SECTORS[sector_idx]
+        # Correct sector index calculation to align angle to sector center
+        offset_angle = -90  # Sector 0 (20) is at 270°, so shift by -90°
+        sector_index = int(((angle + offset_angle + 9) % 360) / 18)
+        sector = SECTORS[sector_index]
     return sector, ring
