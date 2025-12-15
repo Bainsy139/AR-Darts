@@ -559,6 +559,7 @@ def main():
             print("Usage: python3 detect_dart.py overlayhit BEFORE.jpg AFTER.jpg OUTPUT.jpg")
             sys.exit(1)
 
+        import datetime
         before_path = sys.argv[2]
         after_path = sys.argv[3]
         out_path = sys.argv[4]
@@ -586,8 +587,33 @@ def main():
             # Use estimate_tip with warped images
             hit_point = estimate_tip(warped_before, warped_after, warped_overlay)
             print(f"DEBUG: Estimated tip @ {hit_point}")
-            draw_debug_overlay_with_hit(after_path, hit_point, out_path)
-            print(f"Overlay+hit written to {out_path}")
+            # Draw overlay with hit and sector lines and annotation
+            after_img = warped_after.copy()
+            center = (int(round(BOARD_CX)), int(round(BOARD_CY)))
+            if hit_point is not None:
+                tip = (int(round(hit_point[0])), int(round(hit_point[1])))
+                # Draw the red circle for the estimated dart tip
+                cv2.circle(after_img, tip, 8, (0, 0, 255), 2)
+                # Annotate detected sector and distance
+                angle_deg = math.degrees(math.atan2(center[1] - tip[1], tip[0] - center[0])) % 360
+                distance = math.hypot(tip[0] - center[0], tip[1] - center[1])
+                # Apply 5° anticlockwise correction for sector detection
+                SECTOR_ANGLE = 18
+                sector_index = int((angle_deg - 5) % 360 // SECTOR_ANGLE)
+                sector = SECTORS[sector_index]
+                label = f"{sector} ({distance:.0f}px)"
+                cv2.putText(after_img, label, (tip[0] + 10, tip[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+            # Draw sector lines in blue
+            SECTOR_ANGLE = 18
+            for i in range(20):
+                angle = math.radians(i * SECTOR_ANGLE)
+                x2 = int(center[0] + 1000 * math.cos(angle))
+                y2 = int(center[1] - 1000 * math.sin(angle))
+                cv2.line(after_img, center, (x2, y2), (255, 0, 0), 1)
+            # Save with timestamped filename
+            timestamp = datetime.datetime.now().strftime("%H%M%S")
+            cv2.imwrite(f"overlay_debug_{timestamp}.jpg", after_img)
+            print(f"Overlay+hit written to overlay_debug_{timestamp}.jpg")
             sys.exit(0)
         else:
             print("Could not compute perspective warp, aborting overlayhit.")
@@ -701,18 +727,15 @@ def get_board_sector_and_ring(x, y, board_center=(960, 540)):
     r_frac = r / max(1.0, BOARD_RADIUS)
     # Apply angle offset for sector mapping
     angle = (math.degrees(math.atan2(dy, dx)) + ANGLE_OFFSET_DEGREES + 360) % 360
-    # Rotate angle 18 degrees counterclockwise before mapping to sector index
-    angle -= 18
-    if angle < 0:
-        angle += 360
+    # 5 degree anticlockwise correction for sector index
+    angle_deg = angle
+    SECTOR_ANGLE = 18
     # Determine ring
     ring = ring_from_radius_frac(r_frac)
     # Determine sector
     if ring == "miss":
         sector = None
     else:
-        # Correct sector index calculation to align angle to sector center
-        offset_angle = -90  # Sector 0 (20) is at 270°, so shift by -90°
-        sector_index = int(((angle + offset_angle + 9) % 360) / 18)
+        sector_index = int((angle_deg - 5) % 360 // SECTOR_ANGLE)
         sector = SECTORS[sector_index]
     return sector, ring
