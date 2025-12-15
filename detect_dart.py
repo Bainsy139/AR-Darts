@@ -591,7 +591,15 @@ def main():
             after_img = warped_after.copy()
             center = (int(round(BOARD_CX)), int(round(BOARD_CY)))
             if hit_point is not None:
-                tip = (int(round(hit_point[0])), int(round(hit_point[1])))
+                # Estimate the tip based on offset from the flight/shaft center along the dart direction.
+                cx, cy = hit_point
+                # For this overlay, we assume the direction is from board center to detected tip.
+                angle = math.atan2(cy - center[1], cx - center[0])
+                # Increase the offset distance by 15 pixels (was 60, now 75)
+                offset_distance = 75
+                tip_x = cx - offset_distance * math.cos(angle)
+                tip_y = cy - offset_distance * math.sin(angle)
+                tip = (int(round(tip_x)), int(round(tip_y)))
                 # Draw the red circle for the estimated dart tip
                 cv2.circle(after_img, tip, 8, (0, 0, 255), 2)
                 # Annotate detected sector and distance
