@@ -366,70 +366,22 @@ def find_dart_center(before_img, after_img, debug_img=None):
     if COMP_DILATE_ITERS > 0:
         comp = cv2.dilate(comp, np.ones((3, 3), np.uint8), iterations=COMP_DILATE_ITERS)
 
-    # 4) High-pass the diff to reduce projector/illumination drift.
-    hp = diff.astype(np.float32) - cv2.GaussianBlur(diff, (HP_BLUR_KSIZE, HP_BLUR_KSIZE), 0).astype(np.float32)
-    hp = np.clip(hp, 0, 255).astype(np.uint8)
-
-    # Gate hp to the coarse component mask so UI/lighting edges don't dominate
-    hp = cv2.bitwise_and(hp, hp, mask=comp)
-
-    # 5) Edges of the gated high-pass diff.
-    edges = cv2.Canny(hp, CANNY_LOW, CANNY_HIGH)
-
-    if EDGE_DILATE_ITERS > 0:
-        edges = cv2.dilate(edges, np.ones((3, 3), np.uint8), iterations=EDGE_DILATE_ITERS)
-
-    ys, xs = np.where(edges > 0)
-    print(f"[DEBUG] Found {len(xs)} edge pixels after Canny")
-    if len(xs) < MIN_EDGE_PIXELS:
+    # 4) TIP SELECTION (STRICT): topmost pixel in the blob mask (smallest Y)
+    ys, xs = np.where(comp > 0)
+    if len(xs) == 0:
         if debug_img is not None:
             cv2.imwrite("debug_last_blob.jpg", debug_img)
-        return None, edges
+        return None, comp
 
-    coords = np.column_stack((xs, ys)).astype(np.float32)
-    c = np.array([BOARD_CX, BOARD_CY], dtype=np.float32)
-
-    # 6) Primary tip heuristic: major-axis inward endpoint (PCA)
-    tip = None
-    axis_u = None
-    tip_pca, axis_u = _tip_from_pca_endpoints(coords, c)
-    if tip_pca is not None:
-        # Nudge a little further toward the board centre (helps when the endpoint is the shaft edge)
-        v = c - tip_pca
-        vn = float(np.hypot(v[0], v[1]))
-        if vn > 1e-6:
-            tip = tip_pca + (v / vn) * float(TIP_NUDGE_PX)
-        else:
-            tip = tip_pca
-
-    # 7) Secondary: ray-constrained inward point (keeps behaviour when PCA is unstable)
-    if tip is None:
-        centroid = coords.mean(axis=0)
-        v = centroid - c
-        v_norm = float(np.hypot(v[0], v[1]))
-        if v_norm > 1e-6:
-            d = v / v_norm  # unit direction from centre outward
-            rel = coords - c
-            t = rel[:, 0] * d[0] + rel[:, 1] * d[1]
-            perp = np.abs(rel[:, 0] * (-d[1]) + rel[:, 1] * d[0])
-            mask = (t > 0) & (perp <= RAY_BAND_PX)
-            cand = coords[mask]
-            cand_t = t[mask]
-            if len(cand) >= MIN_RAY_PIXELS:
-                tip = cand[int(np.argmin(cand_t))]
-
-    # 8) Final fallback: average of K closest edge pixels to centre
-    if tip is None:
-        d2 = np.sum((coords - c) ** 2, axis=1)
-        k = min(TIP_K_CLOSEST, len(d2))
-        idxs = np.argpartition(d2, k - 1)[:k]
-        tip = coords[idxs].mean(axis=0)
+    i = int(np.argmin(ys))
+    tip_x = int(xs[i])
+    tip_y = int(ys[i])
 
     # Draw tip if requested
-    if debug_img is not None and tip is not None:
-        cv2.circle(debug_img, (int(round(tip[0])), int(round(tip[1]))), 5, (0, 0, 255), -1)
+    if debug_img is not None:
+        cv2.circle(debug_img, (tip_x, tip_y), 5, (0, 0, 255), -1)
 
-    return (float(tip[0]), float(tip[1])), edges
+    return (float(tip_x), float(tip_y)), comp
 
 
 def detect_impact(before_img, after_img):
@@ -589,25 +541,10 @@ def main():
             print(f"DEBUG: Estimated tip @ {hit_point}")
             after_img = warped_after.copy()
             center = (int(round(BOARD_CX)), int(round(BOARD_CY)))
-            tip_point = None
-            if hit_point is not None and edges is not None:
-                # Find edge pixels (nonzero in edges)
-                ys, xs = np.where(edges > 0)
-                tip_candidates = list(zip(xs, ys))
-                if tip_candidates:
-                    # Get topmost candidate (minimum y-value)
-                    topmost_point = min(tip_candidates, key=lambda p: p[1])
-                    tip_xy = (int(topmost_point[0]), int(topmost_point[1]))
-                    # Draw a red circle at the estimated tip
-                    cv2.circle(after_img, tip_xy, 8, (0, 0, 255), 2)
-                    # Annotate detected sector and distance
-                    angle_deg = math.degrees(math.atan2(center[1] - tip_xy[1], tip_xy[0] - center[0])) % 360
-                    distance = math.hypot(tip_xy[0] - center[0], tip_xy[1] - center[1])
-                    SECTOR_ANGLE = 18
-                    sector_index = int((angle_deg - 5) % 360 // SECTOR_ANGLE)
-                    sector = SECTORS[sector_index]
-                    label = f"{sector} ({distance:.0f}px)"
-                    cv2.putText(after_img, label, (tip_xy[0] + 10, tip_xy[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+            # hit_point is already the strict topmost pixel from the blob mask
+            if hit_point is not None:
+                tip_xy = (int(round(hit_point[0])), int(round(hit_point[1])))
+                cv2.circle(after_img, tip_xy, 8, (0, 0, 255), 2)
             # Draw sector lines in blue
             SECTOR_ANGLE = 18
             for i in range(20):
@@ -723,27 +660,16 @@ def estimate_tip(before_img, after_img, debug_img=None):
     h, w = before_img.shape[:2]
     warped_before = cv2.warpPerspective(before_img, M, (w, h))
     warped_after = cv2.warpPerspective(after_img, M, (w, h))
-    # Find edge pixels from the warped images
-    _, edges = find_dart_center(warped_before, warped_after, debug_img)
-    # Find coordinates of all edge pixels
-    if edges is not None:
-        edge_pixels = np.column_stack(np.where(edges > 0))
-    else:
-        edge_pixels = []
-    # Sort edge pixels by y-coordinate (ascending = top of image)
-    if len(edge_pixels) > 0:
-        edge_pixels = sorted(edge_pixels, key=lambda p: p[0])
-        # Use the topmost pixel as the estimated tip
-        tip_y, tip_x = edge_pixels[0]
-        estimated_tip = (int(tip_x), int(tip_y))
-        print(f"[DEBUG] Topmost edge pixel selected as tip: ({tip_x}, {tip_y})")
-        return (float(tip_x), float(tip_y))
-    else:
-        # fallback: use board center
-        center_x = int(round(BOARD_CX))
-        center_y = int(round(BOARD_CY))
-        print("[ERROR] No edge pixels found. Falling back to board center.")
-        return (float(center_x), float(center_y))
+    # find_dart_center now returns the strict topmost pixel from the blob mask
+    tip_xy, _ = find_dart_center(warped_before, warped_after, debug_img)
+
+    if tip_xy is None:
+        print("[ERROR] No dart pixels found.")
+        return None
+
+    tip_x, tip_y = tip_xy
+    print(f"[DEBUG] Topmost blob pixel selected as tip: ({tip_x:.1f}, {tip_y:.1f})")
+    return (float(tip_x), float(tip_y))
 
 if __name__ == "__main__":
     main()
