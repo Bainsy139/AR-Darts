@@ -3,6 +3,13 @@ import math
 import cv2
 import numpy as np
 
+# Try to import ArUco for optional marker-based calibration
+try:
+    import cv2.aruco as aruco
+    HAS_ARUCO = True
+except ImportError:
+    HAS_ARUCO = False
+
 # ------------------------------
 # CONFIG – tweak these as needed
 # ------------------------------
@@ -16,7 +23,7 @@ BOARD_RADIUS = 130  # pixels from centre to outer double ring edge (tweak if ove
 # Rotation offset in degrees to align sector 20 to the top
 # Previously -18.0, but tests show we were off by one full wedge (18°).
 # Using 0.0 brings 20/1/5/19/15 etc into the correct sectors.
-ROT_OFFSET_DEG = -5.8
+ROT_OFFSET_DEG = -9.8
 
 # Rough ring ratios – we’ll refine later
 def ring_from_radius_frac(r_frac: float) -> str:
@@ -54,13 +61,17 @@ SECTORS = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17,
 # If camera is upside-down
 CAMERA_UPSIDE_DOWN = True
 
+
 # Optional perspective warp to correct board foreshortening.
 # We now calibrate this from 4 points on the outer double ring.
 # Source points (from overlay_local_test.jpg, AFTER rotation):
 #   top, right, bottom, left
 USE_WARP = True
+USE_ARUCO_WARP = True  # try to refine the warp matrix from ArUco markers if available
 
-SRC_POINTS = np.float32([
+# Default source points: manual estimate of the outer double ring top/right/bottom/left.
+# These are used as a fallback when ArUco-based calibration is not available.
+DEFAULT_SRC_POINTS = np.float32([
     [1039, 483],   # top
     [1195, 617],   # right
     [1045, 738],   # bottom
@@ -76,7 +87,8 @@ DST_POINTS = np.float32([
     [BOARD_CX - BOARD_RADIUS, BOARD_CY],                # left
 ])
 
-WARP_MATRIX = cv2.getPerspectiveTransform(SRC_POINTS, DST_POINTS)
+# This will be filled on first use, either from ArUco markers or from DEFAULT_SRC_POINTS.
+WARP_MATRIX = None
 
 # Threshold tuning
 DIFF_BLUR_KSIZE = 9
@@ -162,7 +174,17 @@ def load_image(path: str):
 
     # Then optionally apply perspective warp to correct foreshortening.
     if USE_WARP:
+        global WARP_MATRIX
         h, w = img.shape[:2]
+
+        # Lazily initialise the warp matrix on first use.
+        if WARP_MATRIX is None:
+            M = _compute_warp_from_aruco(img)
+            if M is None:
+                # ArUco not available or markers not found → fall back to manual points.
+                M = cv2.getPerspectiveTransform(DEFAULT_SRC_POINTS, DST_POINTS)
+            WARP_MATRIX = M
+
         img = cv2.warpPerspective(img, WARP_MATRIX, (w, h))
 
     return img
@@ -171,6 +193,50 @@ def load_image(path: str):
 def preprocess_for_diff(img):
     # Keep this light; we do the heavy blurs on the diff image so we don’t erase the tip.
     return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+
+# Try to compute a perspective warp from 4 ArUco markers.
+def _compute_warp_from_aruco(img):
+    """Try to compute a perspective warp from 4 ArUco markers.
+
+    Expects marker IDs 0,1,2,3 placed at (roughly) top, right, bottom, left
+    of the outer double ring. Returns a 3x3 warp matrix or None.
+    """
+    if not HAS_ARUCO or not USE_ARUCO_WARP:
+        return None
+
+    # Older OpenCV ArUco API style
+    try:
+        dictionary = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
+        parameters = aruco.DetectorParameters_create()
+    except AttributeError:
+        # If the ArUco module is not fully available, bail out cleanly.
+        return None
+
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    corners, ids, _ = aruco.detectMarkers(gray, dictionary, parameters=parameters)
+
+    if ids is None or len(ids) < 4:
+        # Not all markers visible
+        return None
+
+    ids = ids.flatten()
+    required_ids = [0, 1, 2, 3]
+    if not all(r in ids for r in required_ids):
+        return None
+
+    # Build src points in a fixed logical order: top, right, bottom, left.
+    src_pts = []
+    for marker_id in required_ids:
+        idx = int(np.where(ids == marker_id)[0][0])
+        # Use the centre of the marker for robustness
+        c = corners[idx][0].mean(axis=0)
+        src_pts.append(c)
+
+    src_pts = np.array(src_pts, dtype=np.float32)
+
+    M = cv2.getPerspectiveTransform(src_pts, DST_POINTS)
+    return M
 
 
 def _tip_from_pca_endpoints(coords: np.ndarray, board_center: np.ndarray):
