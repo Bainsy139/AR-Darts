@@ -77,6 +77,22 @@
         Player 1 to throw
       </div>
       <!-- Side HUD panels for projection (click-through) -->
+      <!--
+      PLAYER CARD DOM CONTRACT
+      These IDs are REQUIRED by main.js and must not change without updating renderPlayers():
+
+      Player 1:
+      - p1-card   : container (active/inactive state)
+      - p1-name   : static player name
+      - p1-target : current objective (score / ATW target)
+      - p1-last   : persistent last hit (per player)
+
+      Player 2:
+      - p2-card
+      - p2-name
+      - p2-target
+      - p2-last
+      -->
       <div
         id="hud-left"
         class="hud-side left"
@@ -85,11 +101,18 @@
       >
         <div class="card" id="p1-card">
           <div class="p-name" id="p1-name">Player 1</div>
+
           <div class="p-line">
             <span class="label">Target:</span>
             <span id="p1-target">To hit: 1</span>
           </div>
-          <div class="p-line" id="p1-last">Last hit: –</div>
+
+          <div class="p-line" id="p1-last" aria-live="polite">Last hit: —</div>
+
+          <!-- Per-turn throw tracker -->
+          <div class="p-line" id="p1-throws" aria-live="polite">
+            Throws: 🎯 🎯 🎯
+          </div>
         </div>
       </div>
       <div
@@ -100,11 +123,18 @@
       >
         <div class="card" id="p2-card">
           <div class="p-name" id="p2-name">Player 2</div>
+
           <div class="p-line">
             <span class="label">Target:</span>
             <span id="p2-target">To hit: 1</span>
           </div>
-          <div class="p-line" id="p2-last">Last hit: –</div>
+
+          <div class="p-line" id="p2-last" aria-live="polite">Last hit: —</div>
+
+          <!-- Per-turn throw tracker -->
+          <div class="p-line" id="p2-throws" aria-live="polite">
+            Throws: 🎯 🎯 🎯
+          </div>
         </div>
       </div>
     </div>
@@ -143,6 +173,11 @@
         <label for="cal-rot">Rotation (deg)</label>
         <input type="number" id="cal-rot" min="-30" max="30" step="0.1" />
         <span class="val" id="cal-rot-val">—</span>
+      </div>
+      <div class="row">
+        <label for="cal-img-rot">Board image rotation (deg)</label>
+        <input type="range" id="cal-img-rot" min="-180" max="180" step="0.5" />
+        <span class="val" id="cal-img-rot-val">—</span>
       </div>
       <div class="row">
         <button id="cal-save" class="btn">Save Calibration</button>
