@@ -338,19 +338,19 @@ input[type="range"] {
 /* Subtle emphasis on active text */
 .hud-side .card.active .p-name {
   color: #ffffff;
-  text-shadow: 0 0 10px rgba(0, 255, 200, 0.35);
+  text-shadow: 0 0 10px rgba(0, 255, 200, 1);
 }
 .hud-side .card.inactive .p-name {
   color: #b7d6db;
 }
 .hud-side .card.inactive .p-line {
-  opacity: 0.6;
+  opacity: 1;
 }
 
 /* TEMP: de-emphasize Throws line; will remove later */
 #p1-throws,
 #p2-throws {
-  opacity: 0.55;
+  opacity: 1;
 }
 
 /* ===== Turn badge (top-center) ===== */
