@@ -21,6 +21,9 @@ BOARD_CX = 1042
 BOARD_CY = 610
 BOARD_RADIUS = 185
 
+# Define DST_POINTS exactly once after board config
+DST_POINTS = _rebuild_dst_points()
+
 AUTO_GEOMETRY_FROM_DEFAULT_SRC = False  # keep geometry consistent with DEFAULT_SRC_POINTS
 
 def _derive_geometry_from_trbl(src_pts: np.ndarray):
