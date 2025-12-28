@@ -261,13 +261,16 @@ def game_loop():
     while True:
         time.sleep(tick_rate)
 
-        # Update motion level from camera
-        frame_gray = capture_gray_frame()
-        motion_level = compute_motion_level(frame_gray)
-        print(f"[MOTION] {motion_level:.2f}")     #------- this is to show the motion picked up by the camera
-
         with STATE_LOCK:
             state = STATE
+
+        # Update motion level from camera ONLY when allowed
+        if state in (GameState.ARMED, GameState.THROW_IN_PROGRESS):
+            frame_gray = capture_gray_frame()
+            motion_level = compute_motion_level(frame_gray)
+            print(f"[MOTION] {motion_level:.2f}")
+        else:
+            motion_level = 0.0
 
         # ---- HOME ----
         if state == GameState.HOME:
