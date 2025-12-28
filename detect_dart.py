@@ -17,10 +17,43 @@ except ImportError:
 # ------------------------------
 
 # Board centre (pixels) and radius in the captured image
-# Calibrated from overlay_debug on 1920x1080 frames
-BOARD_CX = 1042   # horizontal centre of board
-BOARD_CY = 625    # vertical centre of board
-BOARD_RADIUS = 130  # pixels from centre to outer double ring edge (tweak if overlay drifts)
+# IMPORTANT: if warp points change, these MUST match the same geometry or you'll classify real hits as MISS.
+BOARD_CX = 1042   # fallback
+BOARD_CY = 625    # fallback
+BOARD_RADIUS = 130  # fallback
+
+AUTO_GEOMETRY_FROM_DEFAULT_SRC = True  # keep geometry consistent with DEFAULT_SRC_POINTS
+
+def _derive_geometry_from_trbl(src_pts: np.ndarray):
+    """
+    Derive (cx, cy, radius) from points ordered: top, right, bottom, left.
+    Radius is derived mainly from left/right distance (more stable under foreshortening).
+    """
+    pts = np.asarray(src_pts, dtype=np.float32)
+    if pts.shape != (4, 2):
+        return None
+
+    top, right, bottom, left = pts
+
+    cx = float((right[0] + left[0]) / 2.0)
+    cy = float((top[1] + bottom[1]) / 2.0)
+
+    r_right = float(np.hypot(right[0] - cx, right[1] - cy))
+    r_left  = float(np.hypot(left[0]  - cx, left[1]  - cy))
+    radius = float((r_right + r_left) / 2.0)
+
+    if radius < 30:
+        return None
+    return cx, cy, radius
+
+
+def _rebuild_dst_points():
+    return np.float32([
+        [BOARD_CX,               BOARD_CY - BOARD_RADIUS],  # top
+        [BOARD_CX + BOARD_RADIUS, BOARD_CY],                # right
+        [BOARD_CX,               BOARD_CY + BOARD_RADIUS],  # bottom
+        [BOARD_CX - BOARD_RADIUS, BOARD_CY],                # left
+    ])
 
 # Angle offset to correct sector mapping (rotate counter-clockwise)
 ANGLE_OFFSET_DEGREES = 0  # Rotate counter-clockwise to correct sector mapping
@@ -81,15 +114,14 @@ DEFAULT_SRC_POINTS = np.float32([
     [1045, 738],   # bottom
     [890,  627],   # left
 ])
+# Keep scoring geometry consistent with the warp points
+if AUTO_GEOMETRY_FROM_DEFAULT_SRC:
+    g = _derive_geometry_from_trbl(DEFAULT_SRC_POINTS)
+    if g is not None:
+        BOARD_CX, BOARD_CY, BOARD_RADIUS = g
+        DST_POINTS = _rebuild_dst_points()
+        print(f"[GEOM] Derived from DEFAULT_SRC_POINTS: CX={BOARD_CX:.1f}, CY={BOARD_CY:.1f}, R={BOARD_RADIUS:.1f}")
 
-# Target points: where those 4 points would be on a perfect circle
-# centred at (BOARD_CX, BOARD_CY) with radius BOARD_RADIUS.
-DST_POINTS = np.float32([
-    [BOARD_CX,               BOARD_CY - BOARD_RADIUS],  # top
-    [BOARD_CX + BOARD_RADIUS, BOARD_CY],                # right
-    [BOARD_CX,               BOARD_CY + BOARD_RADIUS],  # bottom
-    [BOARD_CX - BOARD_RADIUS, BOARD_CY],                # left
-])
 
 # This will be filled on first use, either from ArUco markers or from DEFAULT_SRC_POINTS.
 WARP_MATRIX = None
@@ -690,27 +722,3 @@ def estimate_tip(before_img, after_img, debug_img=None):
 
 if __name__ == "__main__":
     main()
-# --- Utility: get_board_sector_and_ring with rotation offset correction ---
-def get_board_sector_and_ring(x, y, board_center=(960, 540)):
-    """
-    Given (x, y) pixel coordinates and the board center, return (sector, ring).
-    Applies a -27 degree rotation correction after angle calculation.
-    """
-    dx = x - board_center[0]
-    dy = y - board_center[1]
-    r = math.hypot(dx, dy)
-    r_frac = r / max(1.0, BOARD_RADIUS)
-    # Apply angle offset for sector mapping
-    angle = (math.degrees(math.atan2(dy, dx)) + ANGLE_OFFSET_DEGREES + 360) % 360
-    # 5 degree anticlockwise correction for sector index
-    angle_deg = angle
-    SECTOR_ANGLE = 18
-    # Determine ring
-    ring = ring_from_radius_frac(r_frac)
-    # Determine sector
-    if ring == "miss":
-        sector = None
-    else:
-        sector_index = int((angle_deg - 5) % 360 // SECTOR_ANGLE)
-        sector = SECTORS[sector_index]
-    return sector, ring
