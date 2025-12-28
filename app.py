@@ -3,8 +3,39 @@ import subprocess
 import os
 import shutil
 import detect_dart  # uses your existing detection logic
+import threading
+import time
+from enum import Enum, auto
 
 app = Flask(__name__)
+
+class GameState(Enum):
+    HOME = auto()
+    GAME_INIT = auto()
+    ARMED = auto()
+    THROW_IN_PROGRESS = auto()
+    LOCK = auto()
+    TURN_CHANGE = auto()
+    WIN = auto()
+
+STATE = GameState.HOME
+STATE_LOCK = threading.Lock()
+
+current_player = 0
+darts_thrown = 0
+MAX_DARTS = 3
+
+# Fake motion signal for now (0.0 = still, 1.0 = motion)
+motion_level = 0.0
+motion_stable_frames = 0
+MOTION_THRESHOLD = 0.5
+STABLE_FRAMES_REQUIRED = 5
+
+def set_state(new_state):
+    global STATE
+    with STATE_LOCK:
+        print(f"[STATE] {STATE.name} → {new_state.name}")
+        STATE = new_state
 
 # Paths for before/after images used by detection
 BEFORE_PATH = "before.jpg"
@@ -167,6 +198,90 @@ def detect():
         }
     })
 
+@app.post('/debug/start-game')
+def debug_start_game():
+    set_state(GameState.GAME_INIT)
+    return jsonify({"ok": True, "state": STATE.name})
+
+@app.post('/debug/motion/start')
+def debug_motion_start():
+    global motion_level
+    motion_level = 1.0
+    return jsonify({"ok": True, "motion": motion_level})
+
+@app.post('/debug/motion/stop')
+def debug_motion_stop():
+    global motion_level
+    motion_level = 0.0
+    return jsonify({"ok": True, "motion": motion_level})
+
+def game_loop():
+    global STATE, motion_level, motion_stable_frames, darts_thrown, current_player
+
+    print("[GAME LOOP] Started")
+    tick_rate = 0.1  # seconds (10 Hz)
+
+    while True:
+        time.sleep(tick_rate)
+
+        with STATE_LOCK:
+            state = STATE
+
+        # ---- HOME ----
+        if state == GameState.HOME:
+            continue
+
+        # ---- GAME INIT ----
+        if state == GameState.GAME_INIT:
+            current_player = 0
+            darts_thrown = 0
+            motion_stable_frames = 0
+            set_state(GameState.ARMED)
+            continue
+
+        # ---- ARMED ----
+        if state == GameState.ARMED:
+            if motion_level > MOTION_THRESHOLD:
+                motion_stable_frames = 0
+                set_state(GameState.THROW_IN_PROGRESS)
+            continue
+
+        # ---- THROW IN PROGRESS ----
+        if state == GameState.THROW_IN_PROGRESS:
+            if motion_level <= MOTION_THRESHOLD:
+                motion_stable_frames += 1
+                if motion_stable_frames >= STABLE_FRAMES_REQUIRED:
+                    set_state(GameState.LOCK)
+            else:
+                motion_stable_frames = 0
+            continue
+
+        # ---- LOCK ----
+        if state == GameState.LOCK:
+            darts_thrown += 1
+            print(f"[LOCK] Dart detected for Player {current_player + 1} (dart {darts_thrown})")
+
+            # Stub: no detection yet, just simulate a valid hit
+            if darts_thrown >= MAX_DARTS:
+                set_state(GameState.TURN_CHANGE)
+            else:
+                set_state(GameState.ARMED)
+            continue
+
+        # ---- TURN CHANGE ----
+        if state == GameState.TURN_CHANGE:
+            current_player = (current_player + 1) % 2
+            darts_thrown = 0
+            print(f"[TURN] Now Player {current_player + 1}")
+            set_state(GameState.ARMED)
+            continue
+
+        # ---- WIN ----
+        if state == GameState.WIN:
+            print("[WIN] Game over, returning to HOME")
+            set_state(GameState.HOME)
+            continue
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    threading.Thread(target=game_loop, daemon=True).start()
+    app.run(host="0.0.0.0", port=5050, debug=True)
