@@ -21,8 +21,6 @@ BOARD_CX = 1042
 BOARD_CY = 610
 BOARD_RADIUS = 185
 
-# Define DST_POINTS exactly once after board config
-DST_POINTS = _rebuild_dst_points()
 
 AUTO_GEOMETRY_FROM_DEFAULT_SRC = False  # keep geometry consistent with DEFAULT_SRC_POINTS
 
@@ -49,6 +47,7 @@ def _derive_geometry_from_trbl(src_pts: np.ndarray):
     return cx, cy, radius
 
 
+# Function to build DST_POINTS (destination points for perspective warp)
 def _rebuild_dst_points():
     return np.float32([
         [BOARD_CX,               BOARD_CY - BOARD_RADIUS],  # top
@@ -56,6 +55,9 @@ def _rebuild_dst_points():
         [BOARD_CX,               BOARD_CY + BOARD_RADIUS],  # bottom
         [BOARD_CX - BOARD_RADIUS, BOARD_CY],                # left
     ])
+
+# Build DST_POINTS once, after function definition
+DST_POINTS = _rebuild_dst_points()
 
 # Angle offset to correct sector mapping (rotate counter-clockwise)
 ANGLE_OFFSET_DEGREES = 0  # Rotate counter-clockwise to correct sector mapping
