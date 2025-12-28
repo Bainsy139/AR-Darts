@@ -264,7 +264,7 @@ def game_loop():
         # Update motion level from camera
         frame_gray = capture_gray_frame()
         motion_level = compute_motion_level(frame_gray)
-        print(f"[MOTION] {motion_level:.2f}")     #------- this is to show the motion picked up by the camera
+        # print(f"[MOTION] {motion_level:.2f}")     #------- this is to show the motion picked up by the camera
 
         with STATE_LOCK:
             state = STATE
