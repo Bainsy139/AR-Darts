@@ -19,7 +19,7 @@ except ImportError:
 # FIXED GEOMETRY — DO NOT AUTO-DERIVE
 BOARD_CX = 1042
 BOARD_CY = 610
-BOARD_RADIUS = 185
+BOARD_RADIUS = 210
 
 
 AUTO_GEOMETRY_FROM_DEFAULT_SRC = False  # keep geometry consistent with DEFAULT_SRC_POINTS
@@ -65,7 +65,7 @@ ANGLE_OFFSET_DEGREES = 0  # Rotate counter-clockwise to correct sector mapping
 # Rotation offset in degrees to align sector 20 to the top
 # Previously -18.0, but tests show we were off by one full wedge (18°).
 # Using 0.0 brings 20/1/5/19/15 etc into the correct sectors.
-ROT_OFFSET_DEG = -9.8
+ROT_OFFSET_DEG = -18.8
 
 # Rough ring ratios – we’ll refine later
 def ring_from_radius_frac(r_frac: float) -> str:
