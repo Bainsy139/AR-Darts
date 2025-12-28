@@ -6,6 +6,8 @@ import detect_dart  # uses your existing detection logic
 import threading
 import time
 from enum import Enum, auto
+import cv2
+import numpy as np
 
 app = Flask(__name__)
 
@@ -28,8 +30,55 @@ MAX_DARTS = 3
 # Fake motion signal for now (0.0 = still, 1.0 = motion)
 motion_level = 0.0
 motion_stable_frames = 0
-MOTION_THRESHOLD = 0.5
+MOTION_THRESHOLD = 6.0
 STABLE_FRAMES_REQUIRED = 5
+
+# --- Motion detection (simple frame-diff) ---
+CAM_WIDTH = 640
+CAM_HEIGHT = 360
+CAM_CMD = [
+    "rpicam-still",
+    "--nopreview",
+    "-t", "1",
+    "--width", str(CAM_WIDTH),
+    "--height", str(CAM_HEIGHT),
+    "-o", "-"
+]
+
+_prev_gray = None
+
+def capture_gray_frame():
+    """
+    Capture a low-res frame and return grayscale numpy array.
+    Uses rpicam-still stdout pipe for minimal latency.
+    On non-Pi systems, returns None.
+    """
+    try:
+        p = subprocess.Popen(CAM_CMD, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        img_bytes = p.stdout.read()
+        p.wait(timeout=1)
+        if not img_bytes:
+            return None
+        img = np.frombuffer(img_bytes, dtype=np.uint8)
+        frame = cv2.imdecode(img, cv2.IMREAD_GRAYSCALE)
+        return frame
+    except Exception:
+        return None
+
+def compute_motion_level(frame_gray):
+    """
+    Compute a single scalar motion energy from frame diff.
+    """
+    global _prev_gray
+    if frame_gray is None:
+        return 0.0
+    if _prev_gray is None:
+        _prev_gray = frame_gray
+        return 0.0
+    diff = cv2.absdiff(_prev_gray, frame_gray)
+    _prev_gray = frame_gray
+    # Mean absolute difference as motion energy
+    return float(np.mean(diff))
 
 def set_state(new_state):
     global STATE
@@ -203,18 +252,6 @@ def debug_start_game():
     set_state(GameState.GAME_INIT)
     return jsonify({"ok": True, "state": STATE.name})
 
-@app.post('/debug/motion/start')
-def debug_motion_start():
-    global motion_level
-    motion_level = 1.0
-    return jsonify({"ok": True, "motion": motion_level})
-
-@app.post('/debug/motion/stop')
-def debug_motion_stop():
-    global motion_level
-    motion_level = 0.0
-    return jsonify({"ok": True, "motion": motion_level})
-
 def game_loop():
     global STATE, motion_level, motion_stable_frames, darts_thrown, current_player
 
@@ -223,6 +260,11 @@ def game_loop():
 
     while True:
         time.sleep(tick_rate)
+
+        # Update motion level from camera
+        frame_gray = capture_gray_frame()
+        motion_level = compute_motion_level(frame_gray)
+        print(f"[MOTION] {motion_level:.2f}")
 
         with STATE_LOCK:
             state = STATE
