@@ -264,7 +264,7 @@ def game_loop():
         # Update motion level from camera
         frame_gray = capture_gray_frame()
         motion_level = compute_motion_level(frame_gray)
-        # print(f"[MOTION] {motion_level:.2f}")     ------- this is to show the motion picked up by the camera
+        print(f"[MOTION] {motion_level:.2f}")     #------- this is to show the motion picked up by the camera
 
         with STATE_LOCK:
             state = STATE
@@ -300,10 +300,58 @@ def game_loop():
 
         # ---- LOCK ----
         if state == GameState.LOCK:
-            darts_thrown += 1
-            print(f"[LOCK] Dart detected for Player {current_player + 1} (dart {darts_thrown})")
+            print(f"[LOCK] Processing dart for Player {current_player + 1}")
 
-            # Stub: no detection yet, just simulate a valid hit
+            # Call detection pipeline directly
+            try:
+                # Ensure baseline exists for first dart of turn
+                if darts_thrown == 0 and not os.path.exists(BEFORE_PATH):
+                    subprocess.run([
+                        "rpicam-still",
+                        "-o", BEFORE_PATH,
+                        "-t", "1000",
+                        "--width", "1920",
+                        "--height", "1080",
+                    ], check=True)
+                    print("[LOCK] Baseline captured for new turn.")
+
+                # Capture AFTER frame
+                subprocess.run([
+                    "rpicam-still",
+                    "-o", AFTER_PATH,
+                    "-t", "1000",
+                    "--width", "1920",
+                    "--height", "1080",
+                ], check=True)
+
+                before = detect_dart.load_image(BEFORE_PATH)
+                after = detect_dart.load_image(AFTER_PATH)
+
+                result = detect_dart.detect_impact(before, after)
+                hit = result.get("hit")
+
+            except Exception as e:
+                print("[LOCK] Detection error:", e)
+                set_state(GameState.ARMED)
+                continue
+
+            if not hit:
+                print("[LOCK] No valid impact detected. Returning to ARMED.")
+                set_state(GameState.ARMED)
+                continue
+
+            # Valid hit
+            darts_thrown += 1
+            print(f"[LOCK] Hit confirmed for Player {current_player + 1} (dart {darts_thrown})")
+
+            # Update rolling baseline so darts accumulate
+            try:
+                shutil.copy2(AFTER_PATH, BEFORE_PATH)
+            except Exception as e:
+                print("[LOCK] Warning: failed to update baseline:", e)
+
+            # TODO: scoring hook goes here (use hit['ring'], hit['sector'])
+
             if darts_thrown >= MAX_DARTS:
                 set_state(GameState.TURN_CHANGE)
             else:
