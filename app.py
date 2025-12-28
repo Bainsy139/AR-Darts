@@ -30,7 +30,7 @@ MAX_DARTS = 3
 # Fake motion signal for now (0.0 = still, 1.0 = motion)
 motion_level = 0.0
 motion_stable_frames = 0
-MOTION_THRESHOLD = 1.4
+MOTION_THRESHOLD = 5
 STABLE_FRAMES_REQUIRED = 3
 
 # --- Motion detection (simple frame-diff) ---
