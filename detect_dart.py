@@ -16,13 +16,12 @@ except ImportError:
 # CONFIG – tweak these as needed
 # ------------------------------
 
-# Board centre (pixels) and radius in the captured image
-# IMPORTANT: if warp points change, these MUST match the same geometry or you'll classify real hits as MISS.
-BOARD_CX = 1042   # fallback
-BOARD_CY = 625    # fallback
-BOARD_RADIUS = 130  # fallback
+# FIXED GEOMETRY — DO NOT AUTO-DERIVE
+BOARD_CX = 1042
+BOARD_CY = 610
+BOARD_RADIUS = 185
 
-AUTO_GEOMETRY_FROM_DEFAULT_SRC = True  # keep geometry consistent with DEFAULT_SRC_POINTS
+AUTO_GEOMETRY_FROM_DEFAULT_SRC = False  # keep geometry consistent with DEFAULT_SRC_POINTS
 
 def _derive_geometry_from_trbl(src_pts: np.ndarray):
     """
@@ -114,13 +113,8 @@ DEFAULT_SRC_POINTS = np.float32([
     [1045, 738],   # bottom
     [890,  627],   # left
 ])
-# Keep scoring geometry consistent with the warp points
-if AUTO_GEOMETRY_FROM_DEFAULT_SRC:
-    g = _derive_geometry_from_trbl(DEFAULT_SRC_POINTS)
-    if g is not None:
-        BOARD_CX, BOARD_CY, BOARD_RADIUS = g
-        DST_POINTS = _rebuild_dst_points()
-        print(f"[GEOM] Derived from DEFAULT_SRC_POINTS: CX={BOARD_CX:.1f}, CY={BOARD_CY:.1f}, R={BOARD_RADIUS:.1f}")
+#
+# AUTO_GEOMETRY_FROM_DEFAULT_SRC block removed per instructions
 
 
 # This will be filled on first use, either from ArUco markers or from DEFAULT_SRC_POINTS.
@@ -440,16 +434,11 @@ def detect_impact(before_img, after_img):
       - hit: dict with ring, sector, r_frac, angle_deg, x, y
       - reason: string if no impact ("no_impact"), else None
     """
-    # Apply perspective warp using ArUco if available
-    h, w = before_img.shape[:2]
-    M = _compute_warp_from_aruco(before_img)
-    if M is None:
-        M = cv2.getPerspectiveTransform(DEFAULT_SRC_POINTS, DST_POINTS)
+    # No warp recomputation here; assume images are already corrected
+    M = None
 
-    warped_before = cv2.warpPerspective(before_img, M, (w, h))
-    warped_after = cv2.warpPerspective(after_img, M, (w, h))
-
-    center, _ = find_dart_center(warped_before, warped_after)
+    # Skip warpPerspective if M is None; operate on input images directly
+    center, _ = find_dart_center(before_img, after_img)
 
     if center is None:
         return {"hit": None, "reason": "no_impact"}

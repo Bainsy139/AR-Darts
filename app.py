@@ -264,8 +264,9 @@ def game_loop():
         with STATE_LOCK:
             state = STATE
 
-        # Update motion level from camera ONLY when allowed
-        if state in (GameState.ARMED, GameState.THROW_IN_PROGRESS):
+        # Update motion level from camera ONLY in ARMED
+        # (avoid camera contention with rpicam-still during LOCK)
+        if state == GameState.ARMED:
             frame_gray = capture_gray_frame()
             motion_level = compute_motion_level(frame_gray)
             print(f"[MOTION] {motion_level:.2f}")
@@ -293,6 +294,7 @@ def game_loop():
 
         # ---- THROW IN PROGRESS ----
         if state == GameState.THROW_IN_PROGRESS:
+            # No camera access here; just count stability using last motion_level
             if motion_level <= MOTION_THRESHOLD:
                 motion_stable_frames += 1
                 if motion_stable_frames >= STABLE_FRAMES_REQUIRED:
