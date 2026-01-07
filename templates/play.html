@@ -286,6 +286,12 @@
         type="audio/ogg"
       />
     </audio>
+    <audio id="sfx-turn-atw" preload="auto" muted>
+      <source
+        src="{{ url_for('static', filename='sfx/PlayerChangeATW.mp3') }}"
+        type="audio/mpeg"
+      />
+    </audio>
     <script>
       window.GAME_BOOT = {
         game: "{{ game }}",

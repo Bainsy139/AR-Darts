@@ -178,13 +178,14 @@ function applyBoardRotation() {
 
 const ctx = overlay.getContext("2d");
 
-// --- Simple SFX wiring (hit / bust / win) with WebAudio fallback ---
-const SFX = { hit: null, bust: null, win: null };
+// --- Simple SFX wiring (hit / bust / win / ATW turn) with WebAudio fallback ---
+const SFX = { hit: null, bust: null, win: null, turnATW: null };
 const AUDIO = { ctx: null };
 function initSfx() {
   SFX.hit = document.getElementById("sfx-hit") || null;
   SFX.bust = document.getElementById("sfx-bust") || null;
   SFX.win = document.getElementById("sfx-win") || null;
+  SFX.turnATW = document.getElementById("sfx-turn-atw") || null;
 }
 function ensureAudio() {
   if (!AUDIO.ctx) {
@@ -199,7 +200,7 @@ function ensureAudio() {
   }
 }
 function unmuteSfx() {
-  [SFX.hit, SFX.bust, SFX.win].forEach((el) => {
+  [SFX.hit, SFX.bust, SFX.win, SFX.turnATW].forEach((el) => {
     if (el) el.muted = false; // allowed after a user gesture (click or Start)
   });
   ensureAudio(); // also resume WebAudio on first gesture
@@ -595,6 +596,10 @@ function normaliseDetectionHit(hit) {
 
 async function detectDartFromCamera() {
   try {
+    // Unlock audio for camera-driven turns (no board click)
+    AUDIO_READY = true;
+    unmuteSfx();
+    ensureAudio();
     const res = await fetch("/detect", { method: "POST" });
     const data = await res.json();
     if (!data.ok) {
@@ -730,6 +735,12 @@ class GameEngine {
     console.info("[Engine] reset");
   }
   nextPlayer() {
+    // ATW player-change SFX (fires exactly when the turn flips)
+    if (this.g.mode === "around") {
+      unmuteSfx();
+      ensureAudio();
+      playSfx("turnATW");
+    }
     const prevTurn = this.g.turn;
     this.g.turn = (this.g.turn + 1) % this.g.players.length;
     this.g.throwsLeft = 3; // exactly three darts per turn
@@ -1205,6 +1216,8 @@ function handleClick(e) {
     startGame();
   }
   // Ensure SFX are unmuted on user gesture
+  // Ensure SFX are unmuted on user gesture
+  AUDIO_READY = true;
   unmuteSfx();
   ensureAudio();
 
