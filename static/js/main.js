@@ -381,18 +381,23 @@ function boardCenterAndRadius() {
 
 function drawMarker(x, y, label) {
   ctx.save();
-  ctx.fillStyle = "#fff";
-  ctx.strokeStyle = "#000";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.arc(x, y, 8, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = "#0ff";
-  ctx.font = "14px system-ui";
-  ctx.textAlign = "left";
-  ctx.textBaseline = "top";
-  ctx.fillText(label, x + 10, y + 10);
+
+  // Draw hit as ❌ (same visual language as misses)
+  ctx.font = "28px system-ui";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText("❌", x, y);
+
+  // Optional label for debugging / scoring clarity
+  if (label) {
+    ctx.font = "14px system-ui";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillStyle = "#0ff";
+    ctx.fillText(label, x + 12, y + 12);
+  }
+
   ctx.restore();
 }
 
