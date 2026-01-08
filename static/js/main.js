@@ -658,6 +658,13 @@ async function detectDartFromCamera() {
       updateLastHitUI(throwingPlayer, "Miss");
       game.players[throwingPlayer].turnThrows.push("miss");
       updateThrowsUI(throwingPlayer);
+      // draw miss marker for camera throw
+      turnMarks.push({
+        type: "miss",
+        x: overlay.width / 2,
+        y: overlay.height / 2,
+      });
+      drawFade();
       return;
     }
 
@@ -671,6 +678,13 @@ async function detectDartFromCamera() {
       updateLastHitUI(throwingPlayer, "Miss");
       game.players[throwingPlayer].turnThrows.push("miss");
       updateThrowsUI(throwingPlayer);
+      // draw miss marker for camera throw
+      turnMarks.push({
+        type: "miss",
+        x: overlay.width / 2,
+        y: overlay.height / 2,
+      });
+      drawFade();
       return;
     }
 
@@ -691,6 +705,15 @@ async function detectDartFromCamera() {
     if (statusEl) {
       statusEl.textContent = `Detected: ${label}`;
     }
+
+    // draw hit marker at detected camera coordinates
+    turnMarks.push({
+      type: "hit",
+      x: data.hit.x,
+      y: data.hit.y,
+      label,
+    });
+    drawFade();
 
     // Capture who is throwing BEFORE engine mutates turn
     const throwingPlayer = game.turn;
