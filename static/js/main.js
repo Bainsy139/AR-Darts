@@ -36,6 +36,7 @@ function saveCal() {
         CY: CENTER_Y_FUDGE,
         ROT: ROT_OFFSET_DEG,
         IMG_ROT: BOARD_IMG_ROT_DEG,
+        IMG_SCALE: BOARD_IMG_SCALE,
       })
     );
   } catch (_) {}
@@ -140,6 +141,7 @@ let ROT_OFFSET_DEG = 2;
 
 // Visual-only board image rotation
 let BOARD_IMG_ROT_DEG = 0;
+let BOARD_IMG_SCALE = 1.0;
 // Initial visibility of guides / panel from storage
 let SHOW_CAL_PANEL = loadCalUi();
 // Apply any saved calibration
@@ -150,6 +152,7 @@ let SHOW_CAL_PANEL = loadCalUi();
   if (typeof s.CY === "number") CENTER_Y_FUDGE = s.CY;
   if (typeof s.ROT === "number") ROT_OFFSET_DEG = s.ROT;
   if (typeof s.IMG_ROT === "number") BOARD_IMG_ROT_DEG = s.IMG_ROT;
+  if (typeof s.IMG_SCALE === "number") BOARD_IMG_SCALE = s.IMG_SCALE;
 })();
 
 // --- Visual guides toggle & ring ratios ---
@@ -167,6 +170,8 @@ const container = document.getElementById("board-container");
 const overlay = document.getElementById("overlay");
 const board = document.getElementById("dartboard");
 const statusEl = document.getElementById("status");
+const imgScale = document.getElementById("cal-img-scale");
+const imgScaleVal = document.getElementById("cal-img-scale-val");
 // ---------------------------------------------------------
 // Board image rotation (now decoupled from ROT_OFFSET_DEG)
 // ---------------------------------------------------------
@@ -174,6 +179,12 @@ function applyBoardRotation() {
   if (!board) return;
   board.style.transformOrigin = "50% 50%";
   board.style.transform = `rotate(${BOARD_IMG_ROT_DEG}deg)`;
+}
+
+function applyBoardTransform() {
+  if (!board) return;
+  board.style.transformOrigin = "50% 50%";
+  board.style.transform = `scale(${BOARD_IMG_SCALE})`;
 }
 
 const ctx = overlay.getContext("2d");
@@ -498,12 +509,14 @@ function hookCalibrationPanel() {
     if (dyVal) dyVal.textContent = CENTER_Y_FUDGE;
     if (rotVal) rotVal.textContent = ROT_OFFSET_DEG.toFixed(1);
     if (imgRotVal) imgRotVal.textContent = BOARD_IMG_ROT_DEG.toFixed(1);
+    if (imgScaleVal) imgScaleVal.textContent = BOARD_IMG_SCALE.toFixed(3);
   };
   rx.value = BOARD_RADIUS_FUDGE.toFixed(3);
   dx.value = CENTER_X_FUDGE;
   dy.value = CENTER_Y_FUDGE;
   rot.value = ROT_OFFSET_DEG;
   if (imgRot) imgRot.value = BOARD_IMG_ROT_DEG;
+  if (imgScale) imgScale.value = BOARD_IMG_SCALE;
   tog.checked = SHOW_GUIDES;
   if (panel && panel.classList.contains("hidden")) {
     // no-op
@@ -537,6 +550,14 @@ function hookCalibrationPanel() {
     imgRot.addEventListener("input", () => {
       BOARD_IMG_ROT_DEG = parseFloat(imgRot.value) || 0;
       applyBoardRotation();
+      sync();
+      saveCal();
+    });
+  }
+  if (imgScale) {
+    imgScale.addEventListener("input", () => {
+      BOARD_IMG_SCALE = parseFloat(imgScale.value) || 1.0;
+      applyBoardTransform();
       sync();
       saveCal();
     });
@@ -1316,6 +1337,7 @@ window.addEventListener("DOMContentLoaded", () => {
   drawFade();
   initSfx();
   applyBoardRotation();
+  applyBoardTransform();
   const s = document.getElementById("btn-start");
   const r = document.getElementById("btn-reset");
   const u = document.getElementById("btn-undo");
