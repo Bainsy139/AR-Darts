@@ -142,6 +142,7 @@ let ROT_OFFSET_DEG = 2;
 // Visual-only board image rotation
 let BOARD_IMG_ROT_DEG = 0;
 let BOARD_IMG_SCALE = 1.0;
+let turnMarks = [];
 // Initial visibility of guides / panel from storage
 let SHOW_CAL_PANEL = loadCalUi();
 // Apply any saved calibration
@@ -326,6 +327,7 @@ function drawFade() {
   ctx.clearRect(0, 0, overlay.width, overlay.height);
   const { cx, cy, radius } = boardCenterAndRadius();
   const rect = overlay.getBoundingClientRect();
+
   const g = ctx.createRadialGradient(
     cx - rect.left,
     cy - rect.top,
@@ -338,8 +340,15 @@ function drawFade() {
   g.addColorStop(1, "rgba(0,0,0,0.10)");
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, overlay.width, overlay.height);
+
   drawGuides(cx - rect.left, cy - rect.top, radius);
   drawATWTargetHighlight(cx - rect.left, cy - rect.top, radius);
+
+  // 🔴 THIS IS THE FIX
+  for (const m of turnMarks) {
+    if (m.type === "miss") drawMiss(m.x, m.y);
+    else drawMarker(m.x, m.y, m.label);
+  }
 }
 
 function ringFromRadiusFrac(r) {
@@ -384,6 +393,16 @@ function drawMarker(x, y, label) {
   ctx.textAlign = "left";
   ctx.textBaseline = "top";
   ctx.fillText(label, x + 10, y + 10);
+  ctx.restore();
+}
+
+function drawMiss(x, y) {
+  ctx.save();
+  ctx.font = "28px system-ui";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#ff4d4d";
+  ctx.fillText("❌", x, y);
   ctx.restore();
 }
 
@@ -775,6 +794,7 @@ class GameEngine {
     updateThrowsUI(this.g.turn);
     this.g.turnStartScore = this.g.players[this.g.turn].score;
     // Redraw overlay so ATW highlight updates on turn change
+    turnMarks = [];
     drawFade();
 
     // Immediately update the top-center turn badge on turn change
@@ -1237,6 +1257,23 @@ function handleClick(e) {
   const secIdx = sectorIndexFromAngle(angle);
   const sectorNum = SECTORS[secIdx];
 
+  if (ring === "miss") {
+    turnMarks.push({ type: "miss", x, y });
+    drawFade();
+
+    if (!game.active) startGame();
+
+    const throwingPlayer = game.turn;
+    recordLastHit("Miss");
+    updateLastHitUI(throwingPlayer, "Miss");
+
+    game.players[throwingPlayer].turnThrows.push("miss");
+    updateThrowsUI(throwingPlayer);
+
+    applyHit("miss", null);
+    return;
+  }
+
   // Auto-start the game on first click (before we log the dart)
   if (!game.active) {
     startGame();
@@ -1247,13 +1284,12 @@ function handleClick(e) {
   unmuteSfx();
   ensureAudio();
 
-  // Visuals
+  const markerLabel = ring.includes("bull")
+    ? ring.replace("_", " ")
+    : `${ring} ${sectorNum}`;
+
+  turnMarks.push({ type: "hit", x, y, label: markerLabel });
   drawFade();
-  drawMarker(
-    x,
-    y,
-    ring.includes("bull") ? ring.replace("_", " ") : `${ring} ${sectorNum}`
-  );
 
   // Human‑readable label for this dart
   const hitLabel = ring.includes("bull")
