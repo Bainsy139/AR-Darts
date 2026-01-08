@@ -57,12 +57,17 @@
       #board-bg {
         position: absolute;
         inset: 0;
-        background-image: url("{{ url_for('static', filename='images/beach.png') }}");
         background-size: cover;
         background-position: center;
         background-repeat: no-repeat;
         z-index: 0;
         pointer-events: none;
+      }
+      #board-bg.atw {
+        background-image: url("{{ url_for('static', filename='images/beach.png') }}");
+      }
+      #board-bg.x01 {
+        background-image: url("{{ url_for('static', filename='images/x01Back.jpg') }}");
       }
       #dartboard {
         position: relative;
@@ -86,9 +91,13 @@
     <h1>BainsyBuilds AR Darts</h1>
 
     <div id="board-container">
-      <div id="board-bg" aria-hidden="true"></div>
+      <div
+        id="board-bg"
+        class="{{ 'x01' if game == 'x01' else 'atw' }}"
+        aria-hidden="true"
+      ></div>
       <img
-        src="{{ url_for('static', filename='images/dartboard.png') }}"
+        src="{{ url_for('static', filename='images/x01dartboard.png') if game == 'x01' else url_for('static', filename='images/dartboard.png') }}"
         id="dartboard"
         alt="Dartboard"
       />
