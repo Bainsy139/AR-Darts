@@ -359,9 +359,14 @@ function sectorIndexFromAngle(a) {
 
 function boardCenterAndRadius() {
   const r = board.getBoundingClientRect();
-  let cx = (r.left + r.right) / 2 + CENTER_X_FUDGE;
-  let cy = (r.top + r.bottom) / 2 + CENTER_Y_FUDGE;
-  let radius = (Math.min(r.width, r.height) / 2) * BOARD_RADIUS_FUDGE;
+
+  const cx = (r.left + r.right) / 2 + CENTER_X_FUDGE;
+  const cy = (r.top + r.bottom) / 2 + CENTER_Y_FUDGE;
+
+  // Compensate for CSS scale so math matches visuals
+  const visualRadius = Math.min(r.width, r.height) / 2;
+  const radius = (visualRadius / (BOARD_IMG_SCALE || 1)) * BOARD_RADIUS_FUDGE;
+
   return { cx, cy, radius };
 }
 
