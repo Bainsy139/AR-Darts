@@ -120,8 +120,11 @@ def detect():
         return jsonify({"ok": False, "error": "load_failed"}), 500
 
     result = detect_dart.detect_impact(before, after)
+    print("[DEBUG] Raw detect_dart result:", result)
     # Save debug overlay with hit circle
     hit_info = result.get("hit")
+    if hit_info:
+        print(f"[DEBUG] Raw hit pixels: x={hit_info.get('x')} y={hit_info.get('y')}")
     if hit_info and 'x' in hit_info and 'y' in hit_info:
         debug_overlay = after.copy()
         import cv2
@@ -151,8 +154,10 @@ def detect():
     CAM_W = 1920
     CAM_H = 1080
 
+    print(f"[DEBUG] Normalising with CAM_W={CAM_W}, CAM_H={CAM_H}")
     nx = cx / CAM_W
     ny = cy / CAM_H
+    print(f"[DEBUG] Normalised coords: nx={nx}, ny={ny}")
 
     # Normalise bull labels a bit for the front-end
     if ring == "inner_bull":
@@ -164,6 +169,7 @@ def detect():
     else:
         hit_type = ring  # "single", "double", "treble"
 
+    print(f"[DEBUG] Returning hit payload: type={hit_type}, sector={sector}, x={nx}, y={ny}")
     return jsonify({
         "ok": True,
         "hit": {
