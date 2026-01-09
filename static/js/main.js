@@ -379,6 +379,24 @@ function boardCenterAndRadius() {
   return { cx, cy, radius };
 }
 
+function cameraToOverlayCoords(hit) {
+  // Camera gives normalized board coords (0..1). Convert to overlay pixels.
+  const rect = overlay.getBoundingClientRect();
+  const { cx, cy, radius } = boardCenterAndRadius();
+
+  const cxLocal = cx - rect.left;
+  const cyLocal = cy - rect.top;
+
+  // hit.x / hit.y are 0..1 with (0.5,0.5) at board center
+  const dx = (hit.x - 0.5) * 2 * radius;
+  const dy = (hit.y - 0.5) * 2 * radius;
+
+  return {
+    x: cxLocal + dx,
+    y: cyLocal + dy,
+  };
+}
+
 function drawMarker(x, y, label) {
   ctx.save();
 
@@ -664,10 +682,11 @@ async function detectDartFromCamera() {
       game.players[throwingPlayer].turnThrows.push("miss");
       updateThrowsUI(throwingPlayer);
       // draw miss marker for camera throw
+      const pt = cameraToOverlayCoords(data.hit || { x: 0.5, y: 0.5 });
       turnMarks.push({
         type: "miss",
-        x: overlay.width / 2,
-        y: overlay.height / 2,
+        x: pt.x,
+        y: pt.y,
       });
       drawFade();
       return;
@@ -684,10 +703,11 @@ async function detectDartFromCamera() {
       game.players[throwingPlayer].turnThrows.push("miss");
       updateThrowsUI(throwingPlayer);
       // draw miss marker for camera throw
+      const pt = cameraToOverlayCoords(data.hit || { x: 0.5, y: 0.5 });
       turnMarks.push({
         type: "miss",
-        x: overlay.width / 2,
-        y: overlay.height / 2,
+        x: pt.x,
+        y: pt.y,
       });
       drawFade();
       return;
@@ -712,10 +732,11 @@ async function detectDartFromCamera() {
     }
 
     // draw hit marker at detected camera coordinates
+    const pt = cameraToOverlayCoords(data.hit);
     turnMarks.push({
       type: "hit",
-      x: data.hit.x,
-      y: data.hit.y,
+      x: pt.x,
+      y: pt.y,
       label,
     });
     drawFade();
