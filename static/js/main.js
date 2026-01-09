@@ -876,7 +876,6 @@ class GameEngine {
     updateThrowsUI(this.g.turn);
     this.g.turnStartScore = this.g.players[this.g.turn].score;
     // Redraw overlay so ATW highlight updates on turn change
-    turnMarks = [];
     drawFade();
 
     // Immediately update the top-center turn badge on turn change
