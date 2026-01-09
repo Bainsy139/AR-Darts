@@ -714,12 +714,13 @@ async function detectDartFromCamera() {
       updateLastHitUI(throwingPlayer, "Miss");
       game.players[throwingPlayer].turnThrows.push("miss");
       updateThrowsUI(throwingPlayer);
-      // draw miss marker for camera throw using camera coords
-      const { x, y } = cameraToOverlayCoords(data.hit);
+      // draw miss marker for camera throw at board center
+      const rect = overlay.getBoundingClientRect();
+      const { cx, cy } = boardCenterAndRadius();
       turnMarks.push({
         type: "miss",
-        x,
-        y,
+        x: cx - rect.left,
+        y: cy - rect.top,
       });
       drawFade();
       return;
@@ -735,12 +736,13 @@ async function detectDartFromCamera() {
       updateLastHitUI(throwingPlayer, "Miss");
       game.players[throwingPlayer].turnThrows.push("miss");
       updateThrowsUI(throwingPlayer);
-      // draw miss marker for camera throw using camera coords
-      const { x, y } = cameraToOverlayCoords(data.hit);
+      // draw miss marker for camera throw at board center
+      const rect = overlay.getBoundingClientRect();
+      const { cx, cy } = boardCenterAndRadius();
       turnMarks.push({
         type: "miss",
-        x,
-        y,
+        x: cx - rect.left,
+        y: cy - rect.top,
       });
       drawFade();
       return;
