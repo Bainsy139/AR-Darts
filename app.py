@@ -157,7 +157,7 @@ def detect():
     print(f"[DEBUG] Normalising with CAM_W={CAM_W}, CAM_H={CAM_H}")
     nx = cx / CAM_W
     ny = cy / CAM_H
-    print(f"[DEBUG] Normalised coords: nx={nx}, ny={ny}")
+    print(f"[DEBUG] Sending normalised coords to frontend: nx={nx:.4f}, ny={ny:.4f}")
 
     # Normalise bull labels a bit for the front-end
     if ring == "inner_bull":
@@ -170,7 +170,7 @@ def detect():
         hit_type = ring  # "single", "double", "treble"
 
     print(f"[DEBUG] Returning hit payload: type={hit_type}, sector={sector}, x={nx}, y={ny}")
-    return jsonify({
+    payload = {
         "ok": True,
         "hit": {
             "type": hit_type,
@@ -178,7 +178,9 @@ def detect():
             "x": nx,
             "y": ny,
         }
-    })
+    }
+    print("[DEBUG] Final JSON payload:", payload)
+    return jsonify(payload)
 
 
 if __name__ == '__main__':
