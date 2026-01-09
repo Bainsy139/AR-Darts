@@ -766,14 +766,17 @@ async function detectDartFromCamera() {
       statusEl.textContent = `Detected: ${label}`;
     }
 
-    // draw hit marker using camera coordinates, fallback if missing x/y
+    // draw hit marker using camera coordinates, fallback if missing cx/cy
     let x, y;
     if (
       data.hit &&
-      typeof data.hit.x === "number" &&
-      typeof data.hit.y === "number"
+      typeof data.hit.cx === "number" &&
+      typeof data.hit.cy === "number"
     ) {
-      ({ x, y } = cameraToOverlayCoords(data.hit));
+      ({ x, y } = cameraToOverlayCoords({
+        x: data.hit.cx,
+        y: data.hit.cy,
+      }));
     } else {
       const rect = overlay.getBoundingClientRect();
       const { cx, cy } = boardCenterAndRadius();
