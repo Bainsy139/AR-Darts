@@ -703,11 +703,13 @@ async function detectDartFromCamera() {
     ensureAudio();
     const res = await fetch("/detect", { method: "POST" });
     const data = await res.json();
+    console.log("[DETECT] response", data);
     if (!data.ok) {
       throw new Error("detect endpoint returned !ok");
     }
     // --- CAMERA: No impact detected ---
     if (!data.hit) {
+      console.log("[DETECT] no hit detected");
       if (statusEl) statusEl.textContent = "No impact detected.";
       const throwingPlayer = game.turn;
       recordLastHit("Miss");
@@ -730,6 +732,7 @@ async function detectDartFromCamera() {
 
     // --- CAMERA: Miss detected ---
     if (ring === "miss") {
+      console.log("[DETECT] ring=miss");
       if (statusEl) statusEl.textContent = "Detected: Miss";
       const throwingPlayer = game.turn;
       recordLastHit("Miss");
@@ -768,11 +771,13 @@ async function detectDartFromCamera() {
 
     // draw hit marker using camera coordinates, fallback if missing cx/cy
     let x, y;
+    // --- LOG raw hit coords before drawing ---
     if (
       data.hit &&
       typeof data.hit.cx === "number" &&
       typeof data.hit.cy === "number"
     ) {
+      console.log("[DETECT] raw hit coords", data.hit);
       ({ x, y } = cameraToOverlayCoords({
         x: data.hit.cx,
         y: data.hit.cy,
@@ -783,6 +788,8 @@ async function detectDartFromCamera() {
       x = cx - rect.left;
       y = cy - rect.top;
     }
+    // --- LOG overlay coords ---
+    console.log("[DETECT] overlay coords", x, y);
 
     turnMarks.push({
       type: "hit",
@@ -790,6 +797,7 @@ async function detectDartFromCamera() {
       y,
       label,
     });
+    console.log("[MARKERS] total", turnMarks.length);
     drawFade();
 
     // Capture who is throwing BEFORE engine mutates turn
@@ -880,6 +888,7 @@ class GameEngine {
     console.info("[Engine] reset");
   }
   nextPlayer() {
+    console.log("[TURN] nextPlayer called, marks =", turnMarks.length);
     // ATW player-change SFX (fires exactly when the turn flips)
     if (this.g.mode === "around") {
       unmuteSfx();
