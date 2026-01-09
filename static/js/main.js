@@ -133,8 +133,8 @@ let game = {
 
 // --- Calibration knobs (tweak live with arrow keys) ---
 let BOARD_RADIUS_FUDGE = 0.92;
-let CENTER_X_FUDGE = -5;
-let CENTER_Y_FUDGE = -5;
+let CENTER_X_FUDGE = -8;
+let CENTER_Y_FUDGE = -9;
 
 // Sector math / hit detection rotation
 let ROT_OFFSET_DEG = 2;
