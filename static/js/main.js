@@ -823,8 +823,8 @@ async function detectDartFromCamera() {
       source: "camera",
       ring,
       sector,
-      cx: data.hit.x,
-      cy: data.hit.y,
+      cx: data.hit.cx,
+      cy: data.hit.cy,
     });
   } catch (e) {
     console.warn("detect failed:", e);
