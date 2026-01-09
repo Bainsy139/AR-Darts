@@ -766,8 +766,21 @@ async function detectDartFromCamera() {
       statusEl.textContent = `Detected: ${label}`;
     }
 
-    // draw hit marker using camera coordinates
-    const { x, y } = cameraToOverlayCoords(data.hit);
+    // draw hit marker using camera coordinates, fallback if missing x/y
+    let x, y;
+    if (
+      data.hit &&
+      typeof data.hit.x === "number" &&
+      typeof data.hit.y === "number"
+    ) {
+      ({ x, y } = cameraToOverlayCoords(data.hit));
+    } else {
+      const rect = overlay.getBoundingClientRect();
+      const { cx, cy } = boardCenterAndRadius();
+      x = cx - rect.left;
+      y = cy - rect.top;
+    }
+
     turnMarks.push({
       type: "hit",
       x,
