@@ -37,6 +37,8 @@ function saveCal() {
         ROT: ROT_OFFSET_DEG,
         IMG_ROT: BOARD_IMG_ROT_DEG,
         IMG_SCALE: BOARD_IMG_SCALE,
+        IMG_X: BOARD_IMG_OFFSET_X,
+        IMG_Y: BOARD_IMG_OFFSET_Y,
       })
     );
   } catch (_) {}
@@ -142,6 +144,8 @@ let ROT_OFFSET_DEG = 2;
 // Visual-only board image rotation
 let BOARD_IMG_ROT_DEG = 0;
 let BOARD_IMG_SCALE = 1.0;
+let BOARD_IMG_OFFSET_X = 0;
+let BOARD_IMG_OFFSET_Y = 0;
 let turnMarks = [];
 // Initial visibility of guides / panel from storage
 let SHOW_CAL_PANEL = loadCalUi();
@@ -154,6 +158,8 @@ let SHOW_CAL_PANEL = loadCalUi();
   if (typeof s.ROT === "number") ROT_OFFSET_DEG = s.ROT;
   if (typeof s.IMG_ROT === "number") BOARD_IMG_ROT_DEG = s.IMG_ROT;
   if (typeof s.IMG_SCALE === "number") BOARD_IMG_SCALE = s.IMG_SCALE;
+  if (typeof s.IMG_X === "number") BOARD_IMG_OFFSET_X = s.IMG_X;
+  if (typeof s.IMG_Y === "number") BOARD_IMG_OFFSET_Y = s.IMG_Y;
 })();
 
 // --- Visual guides toggle & ring ratios ---
@@ -185,7 +191,9 @@ function applyBoardRotation() {
 function applyBoardTransform() {
   if (!board) return;
   board.style.transformOrigin = "50% 50%";
-  board.style.transform = `scale(${BOARD_IMG_SCALE})`;
+  board.style.transform = `translate(${BOARD_IMG_OFFSET_X}px, ${BOARD_IMG_OFFSET_Y}px)
+     scale(${BOARD_IMG_SCALE})
+     rotate(${BOARD_IMG_ROT_DEG}deg)`;
 }
 
 const ctx = overlay.getContext("2d");
@@ -535,6 +543,10 @@ function hookCalibrationPanel() {
   const imgRotVal = document.getElementById("cal-img-rot-val");
   const panel = document.getElementById("cal-panel");
   const btnCal = document.getElementById("btn-cal");
+  const imgDx = document.getElementById("cal-img-x");
+  const imgDy = document.getElementById("cal-img-y");
+  const imgDxVal = document.getElementById("cal-img-x-val");
+  const imgDyVal = document.getElementById("cal-img-y-val");
   if (!rx || !dx || !dy || !rot || !tog) return; // panel not present
   if (panel) {
     panel.classList.toggle("hidden", !SHOW_CAL_PANEL);
@@ -557,6 +569,8 @@ function hookCalibrationPanel() {
     if (rotVal) rotVal.textContent = ROT_OFFSET_DEG.toFixed(1);
     if (imgRotVal) imgRotVal.textContent = BOARD_IMG_ROT_DEG.toFixed(1);
     if (imgScaleVal) imgScaleVal.textContent = BOARD_IMG_SCALE.toFixed(3);
+    if (imgDxVal) imgDxVal.textContent = BOARD_IMG_OFFSET_X;
+    if (imgDyVal) imgDyVal.textContent = BOARD_IMG_OFFSET_Y;
   };
   rx.value = BOARD_RADIUS_FUDGE.toFixed(3);
   dx.value = CENTER_X_FUDGE;
@@ -564,6 +578,8 @@ function hookCalibrationPanel() {
   rot.value = ROT_OFFSET_DEG;
   if (imgRot) imgRot.value = BOARD_IMG_ROT_DEG;
   if (imgScale) imgScale.value = BOARD_IMG_SCALE;
+  if (imgDx) imgDx.value = BOARD_IMG_OFFSET_X;
+  if (imgDy) imgDy.value = BOARD_IMG_OFFSET_Y;
   tog.checked = SHOW_GUIDES;
   if (panel && panel.classList.contains("hidden")) {
     // no-op
@@ -604,6 +620,23 @@ function hookCalibrationPanel() {
   if (imgScale) {
     imgScale.addEventListener("input", () => {
       BOARD_IMG_SCALE = parseFloat(imgScale.value) || 1.0;
+      applyBoardTransform();
+      sync();
+      saveCal();
+    });
+  }
+  if (imgDx) {
+    imgDx.addEventListener("input", () => {
+      BOARD_IMG_OFFSET_X = parseInt(imgDx.value || "0");
+      applyBoardTransform();
+      sync();
+      saveCal();
+    });
+  }
+
+  if (imgDy) {
+    imgDy.addEventListener("input", () => {
+      BOARD_IMG_OFFSET_Y = parseInt(imgDy.value || "0");
       applyBoardTransform();
       sync();
       saveCal();
@@ -681,13 +714,12 @@ async function detectDartFromCamera() {
       updateLastHitUI(throwingPlayer, "Miss");
       game.players[throwingPlayer].turnThrows.push("miss");
       updateThrowsUI(throwingPlayer);
-      // draw miss marker for camera throw (always centre)
-      const cx = overlay.width / 2;
-      const cy = overlay.height / 2;
+      // draw miss marker for camera throw using camera coords
+      const { x, y } = cameraToOverlayCoords(data.hit);
       turnMarks.push({
         type: "miss",
-        x: cx,
-        y: cy,
+        x,
+        y,
       });
       drawFade();
       return;
@@ -703,13 +735,12 @@ async function detectDartFromCamera() {
       updateLastHitUI(throwingPlayer, "Miss");
       game.players[throwingPlayer].turnThrows.push("miss");
       updateThrowsUI(throwingPlayer);
-      // draw miss marker for camera throw (always centre)
-      const cx = overlay.width / 2;
-      const cy = overlay.height / 2;
+      // draw miss marker for camera throw using camera coords
+      const { x, y } = cameraToOverlayCoords(data.hit);
       turnMarks.push({
         type: "miss",
-        x: cx,
-        y: cy,
+        x,
+        y,
       });
       drawFade();
       return;
@@ -733,13 +764,12 @@ async function detectDartFromCamera() {
       statusEl.textContent = `Detected: ${label}`;
     }
 
-    // draw hit marker always at overlay centre (diagnostic)
-    const cx = overlay.width / 2;
-    const cy = overlay.height / 2;
+    // draw hit marker using camera coordinates
+    const { x, y } = cameraToOverlayCoords(data.hit);
     turnMarks.push({
       type: "hit",
-      x: cx,
-      y: cy,
+      x,
+      y,
       label,
     });
     drawFade();
