@@ -147,6 +147,13 @@ def detect():
     cx = float(hit_info.get("x", 0.0))
     cy = float(hit_info.get("y", 0.0))
 
+    # Normalise camera pixel coords to 0..1 (based on capture resolution)
+    CAM_W = 1920
+    CAM_H = 1080
+
+    nx = cx / CAM_W
+    ny = cy / CAM_H
+
     # Normalise bull labels a bit for the front-end
     if ring == "inner_bull":
         hit_type = "inner_bull"
@@ -162,8 +169,8 @@ def detect():
         "hit": {
             "type": hit_type,
             "sector": sector,
-            "x": cx,
-            "y": cy,
+            "x": nx,
+            "y": ny,
         }
     })
 
