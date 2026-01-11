@@ -113,12 +113,16 @@ MIN_RAY_PIXELS = 15         # min pixels on that ray band to trust the ray-based
 TIP_NUDGE_PX = 4            # after selecting the inward endpoint, nudge slightly further toward board centre
 COMP_DILATE_ITERS = 0       # dilate the coarse diff blob so edge pixels from the dart are included
 
+HALF_SECTOR_RAD = math.pi / 20  # Half sector in radians (9°)
+
 def sector_index_from_angle(angle: float) -> int:
     rot_rad = math.radians(SECTOR_ROT_OFFSET_DEG)
-    a = angle + math.pi / 2 - rot_rad
+    # Add half a sector offset so the boundary is centered
+    a = angle + math.pi / 2 - rot_rad + HALF_SECTOR_RAD
     two_pi = 2 * math.pi
     a = (a % two_pi + two_pi) % two_pi
     idx = int(math.floor(a / two_pi * 20)) % 20
+    print(f"[DEBUG] sector_index_from_angle: angle={angle:.4f} rad, a={a:.4f}, idx={idx}")
     return idx
 
 
