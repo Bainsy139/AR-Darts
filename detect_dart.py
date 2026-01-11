@@ -110,7 +110,7 @@ RAY_BAND_PX = 10            # max perpendicular distance (px) from the centre→
 MIN_RAY_PIXELS = 15         # min pixels on that ray band to trust the ray-based tip
 
 # Tip selection tuning
-TIP_NUDGE_PX = 2            # after selecting the inward endpoint, nudge slightly further toward board centre
+TIP_NUDGE_PX = 4            # after selecting the inward endpoint, nudge slightly further toward board centre
 COMP_DILATE_ITERS = 0       # dilate the coarse diff blob so edge pixels from the dart are included
 
 def sector_index_from_angle(angle: float) -> int:
@@ -386,20 +386,62 @@ def find_dart_center(before_img, after_img, debug_img=None):
     if COMP_DILATE_ITERS > 0:
         comp = cv2.dilate(comp, np.ones((3, 3), np.uint8), iterations=COMP_DILATE_ITERS)
 
-    # 4) TIP SELECTION (STRICT): topmost pixel in the blob mask (smallest Y)
+    # 4) TIP SELECTION (ROBUST): prefer the inward endpoint of the dart-like component.
+    # "Topmost pixel" is brittle because the highest pixel often belongs to a flight/shadow,
+    # which can push the inferred (x,y) to the wrong wedge or even outside the board.
     ys, xs = np.where(comp > 0)
     if len(xs) == 0:
         if debug_img is not None:
             cv2.imwrite("debug_last_blob.jpg", debug_img)
         return None, comp
 
-    i = int(np.argmin(ys))
-    tip_x = int(xs[i])
-    tip_y = int(ys[i])
+    coords = np.stack([xs, ys], axis=1).astype(np.float32)
+    board_center = np.array([BOARD_CX, BOARD_CY], dtype=np.float32)
+
+    # First attempt: PCA endpoints → choose endpoint that points toward the board centre.
+    tip_xy, _axis_u = _tip_from_pca_endpoints(coords, board_center)
+
+    if tip_xy is not None:
+        # Optional refinement: constrain to a narrow band around the centre→centroid ray,
+        # then pick the most-inward pixel on that band (closest to the board centre).
+        mean = coords.mean(axis=0)
+        v = board_center - mean
+        v_norm = float(np.hypot(v[0], v[1]))
+        if v_norm > 1e-6:
+            v = v / v_norm
+
+            # Perpendicular distance from each point to the ray line through `mean` with direction `v`.
+            rel = coords - mean
+            # 2D cross-product magnitude gives perpendicular distance when v is unit length.
+            perp = np.abs(rel[:, 0] * v[1] - rel[:, 1] * v[0])
+            band = perp <= float(RAY_BAND_PX)
+
+            if int(np.sum(band)) >= int(MIN_RAY_PIXELS):
+                cand = coords[band]
+                # Choose the most-inward candidate (minimum distance to board centre)
+                d = cand - board_center
+                rr = (d[:, 0] ** 2 + d[:, 1] ** 2)
+                j = int(np.argmin(rr))
+                tip_xy = cand[j]
+
+        # Nudge slightly toward the board centre to bias toward the actual impact point.
+        to_c = board_center - tip_xy
+        to_c_norm = float(np.hypot(to_c[0], to_c[1]))
+        if to_c_norm > 1e-6:
+            tip_xy = tip_xy + (to_c / to_c_norm) * float(TIP_NUDGE_PX)
+
+        tip_x = float(tip_xy[0])
+        tip_y = float(tip_xy[1])
+
+    else:
+        # Fallback: keep the old behaviour (topmost pixel) if PCA is unreliable.
+        i = int(np.argmin(ys))
+        tip_x = float(xs[i])
+        tip_y = float(ys[i])
 
     # Draw tip if requested
     if debug_img is not None:
-        cv2.circle(debug_img, (tip_x, tip_y), 5, (0, 0, 255), -1)
+        cv2.circle(debug_img, (int(round(tip_x)), int(round(tip_y))), 5, (0, 0, 255), -1)
 
     return (float(tip_x), float(tip_y)), comp
 
