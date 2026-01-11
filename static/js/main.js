@@ -791,8 +791,29 @@ async function detectDartFromCamera() {
       const camH = 1080;
       const rect = overlay.getBoundingClientRect();
 
-      x = (data.hit.px / camW) * rect.width;
-      y = (data.hit.py / camH) * rect.height;
+      // --- NEW pixel-to-overlay mapping ---
+      const board = boardCenterAndRadius();
+      const camCX = camW / 2;
+      const camCY = camH / 2;
+
+      const dx = data.hit.px - camCX;
+      const dy = data.hit.py - camCY;
+
+      // map camera deltas into overlay space using board radius
+      const scale = board.radius / Math.min(camW, camH);
+
+      x = board.cx + dx * scale;
+      y = board.cy + dy * scale;
+
+      console.debug("[CAM→UI]", {
+        cam_px: data.hit.px,
+        cam_py: data.hit.py,
+        dx,
+        dy,
+        scale,
+        ui_x: x,
+        ui_y: y,
+      });
     } else {
       const rect = overlay.getBoundingClientRect();
       const { cx, cy } = boardCenterAndRadius();
