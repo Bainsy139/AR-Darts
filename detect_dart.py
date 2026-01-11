@@ -22,13 +22,11 @@ BOARD_CX = 1042   # horizontal centre of board
 BOARD_CY = 625    # vertical centre of board
 BOARD_RADIUS = 130  # pixels from centre to outer double ring edge (tweak if overlay drifts)
 
-# Angle offset to correct sector mapping (rotate counter-clockwise)
-ANGLE_OFFSET_DEGREES = 0  # Rotate counter-clockwise to correct sector mapping
-
-# Rotation offset in degrees to align sector 20 to the top
-# Previously -18.0, but tests show we were off by one full wedge (18°).
-# Using 0.0 brings 20/1/5/19/15 etc into the correct sectors.
-ROT_OFFSET_DEG = -9.8
+#
+# Sector rotation offset (degrees).
+# This is the ONLY place sector alignment is corrected.
+# Positive values rotate counter-clockwise.
+SECTOR_ROT_OFFSET_DEG = -18.0
 
 # Rough ring ratios – we’ll refine later
 def ring_from_radius_frac(r_frac: float) -> str:
@@ -116,8 +114,7 @@ TIP_NUDGE_PX = 2            # after selecting the inward endpoint, nudge slightl
 COMP_DILATE_ITERS = 0       # dilate the coarse diff blob so edge pixels from the dart are included
 
 def sector_index_from_angle(angle: float) -> int:
-    """Match the JS sector indexing logic."""
-    rot_rad = math.radians(ROT_OFFSET_DEG)
+    rot_rad = math.radians(SECTOR_ROT_OFFSET_DEG)
     a = angle + math.pi / 2 - rot_rad
     two_pi = 2 * math.pi
     a = (a % two_pi + two_pi) % two_pi
@@ -140,7 +137,8 @@ def classify_hit_with_debug(x: float, y: float):
     Returns a dict with keys: ring, sector, r_frac, angle_deg.
     """
     r_frac, angle_radians = pixel_to_polar(x, y)
-    angle_degrees = math.degrees(angle_radians) % 360
+    raw_deg = math.degrees(angle_radians) % 360
+    corrected_deg = (raw_deg + SECTOR_ROT_OFFSET_DEG) % 360
 
     ring = ring_from_radius_frac(r_frac)
     if ring == "miss":
@@ -149,13 +147,18 @@ def classify_hit_with_debug(x: float, y: float):
         sec_idx = sector_index_from_angle(angle_radians)
         sector = SECTORS[sec_idx]
 
-    print(f"[DEBUG] Tip at ({x:.1f}, {y:.1f}) => Angle: {angle_degrees:.2f}° => Sector: {sector}")
+    print(
+        f"[DEBUG] Tip at ({x:.1f}, {y:.1f}) | "
+        f"raw_angle={raw_deg:.2f}° | "
+        f"corrected={corrected_deg:.2f}° | "
+        f"sector={sector}"
+    )
 
     return {
         "ring": ring,
         "sector": sector,
         "r_frac": r_frac,
-        "angle_deg": angle_degrees,
+        "angle_deg": raw_deg,
     }
 
 
@@ -438,7 +441,7 @@ def detect_impact(before_img, after_img):
 def draw_debug_overlay(input_path: str, output_path: str):
     """
     Debug helper: draw our current idea of the board geometry (rings + wedge lines)
-    onto a camera frame so we can visually tune BOARD_CX/BOARD_CY/BOARD_RADIUS/ROT_OFFSET_DEG.
+    onto a camera frame so we can visually tune BOARD_CX/BOARD_CY/BOARD_RADIUS/SECTOR_ROT_OFFSET_DEG.
 
     Usage from CLI (see main):
         python3 detect_dart.py overlay INPUT.jpg OUTPUT.jpg
@@ -460,7 +463,7 @@ def draw_debug_overlay(input_path: str, output_path: str):
         cv2.circle(overlay, center, r, (0, 255, 0), 1)
 
     # Draw the 20 wedge boundaries using the same rotation convention as sector_index_from_angle
-    rot_rad = math.radians(ROT_OFFSET_DEG)
+    rot_rad = math.radians(SECTOR_ROT_OFFSET_DEG)
     two_pi = 2.0 * math.pi
     for k in range(20):
         # Boundary angles are where the sector index changes; these are spaced every 18°
@@ -487,7 +490,7 @@ def draw_debug_overlay_with_hit(input_path: str, hit_xy, output_path: str):
         r = int(round(BOARD_RADIUS * frac))
         cv2.circle(overlay, center, r, (0, 255, 0), 1)
 
-    rot_rad = math.radians(ROT_OFFSET_DEG)
+    rot_rad = math.radians(SECTOR_ROT_OFFSET_DEG)
     two_pi = 2.0 * math.pi
     for k in range(20):
         angle = -math.pi / 2 + rot_rad + (k * two_pi / 20.0)
@@ -690,27 +693,4 @@ def estimate_tip(before_img, after_img, debug_img=None):
 
 if __name__ == "__main__":
     main()
-# --- Utility: get_board_sector_and_ring with rotation offset correction ---
-def get_board_sector_and_ring(x, y, board_center=(960, 540)):
-    """
-    Given (x, y) pixel coordinates and the board center, return (sector, ring).
-    Applies a -27 degree rotation correction after angle calculation.
-    """
-    dx = x - board_center[0]
-    dy = y - board_center[1]
-    r = math.hypot(dx, dy)
-    r_frac = r / max(1.0, BOARD_RADIUS)
-    # Apply angle offset for sector mapping
-    angle = (math.degrees(math.atan2(dy, dx)) + ANGLE_OFFSET_DEGREES + 360) % 360
-    # 5 degree anticlockwise correction for sector index
-    angle_deg = angle
-    SECTOR_ANGLE = 18
-    # Determine ring
-    ring = ring_from_radius_frac(r_frac)
-    # Determine sector
-    if ring == "miss":
-        sector = None
-    else:
-        sector_index = int((angle_deg - 5) % 360 // SECTOR_ANGLE)
-        sector = SECTORS[sector_index]
-    return sector, ring
+# (Removed get_board_sector_and_ring; all sector/ring logic uses SECTOR_ROT_OFFSET_DEG exclusively.)
