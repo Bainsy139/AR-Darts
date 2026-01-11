@@ -150,14 +150,10 @@ def detect():
     cx = float(hit_info.get("x", 0.0))
     cy = float(hit_info.get("y", 0.0))
 
-    # Normalise camera pixel coords to 0..1 (based on capture resolution)
-    CAM_W = 1920
-    CAM_H = 1080
+    px = cx
+    py = cy
 
-    print(f"[DEBUG] Normalising with CAM_W={CAM_W}, CAM_H={CAM_H}")
-    nx = cx / CAM_W
-    ny = cy / CAM_H
-    print(f"[DEBUG] Sending normalised coords to frontend: nx={nx:.4f}, ny={ny:.4f}")
+    print(f"[DEBUG] Sending PIXEL coords to frontend: px={px:.1f}, py={py:.1f}")
 
     # Normalise bull labels a bit for the front-end
     if ring == "inner_bull":
@@ -169,14 +165,14 @@ def detect():
     else:
         hit_type = ring  # "single", "double", "treble"
 
-    print(f"[DEBUG] Returning hit payload: type={hit_type}, sector={sector}, x={nx}, y={ny}")
+    print(f"[DEBUG] Returning hit payload: type={hit_type}, sector={sector}, px={px}, py={py}")
     payload = {
         "ok": True,
         "hit": {
             "type": hit_type,
             "sector": sector,
-            "x": nx,
-            "y": ny,
+            "px": px,
+            "py": py,
         }
     }
     print("[DEBUG] Final JSON payload:", payload)
