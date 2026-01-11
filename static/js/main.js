@@ -140,6 +140,7 @@ let CENTER_Y_FUDGE = 0;
 
 // Sector math / hit detection rotation
 let ROT_OFFSET_DEG = 2;
+let CAM_ROT_OFFSET_DEG = 18; // camera-only sector alignment
 
 // Visual-only board image rotation
 let BOARD_IMG_ROT_DEG = 0;
@@ -368,8 +369,8 @@ function ringFromRadiusFrac(r) {
   return "single";
 }
 
-function sectorIndexFromAngle(a) {
-  a = a + Math.PI / 2 - (ROT_OFFSET_DEG * Math.PI) / 180;
+function sectorIndexFromAngle(a, rotDeg = ROT_OFFSET_DEG) {
+  a = a + Math.PI / 2 - (rotDeg * Math.PI) / 180;
   a = ((a % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
   return Math.floor((a / (Math.PI * 2)) * 20) % 20;
 }
@@ -800,6 +801,10 @@ async function detectDartFromCamera() {
     }
     // --- LOG overlay coords ---
     console.log("[DETECT] overlay coords", x, y);
+
+    // Camera: derive sector index using camera-specific rotation offset if needed
+    // (If sectorIndexFromAngle is used here, apply CAM_ROT_OFFSET_DEG)
+    // Example: let angle = ...; const secIdx = sectorIndexFromAngle(angle, CAM_ROT_OFFSET_DEG);
 
     turnMarks.push({
       type: "hit",
