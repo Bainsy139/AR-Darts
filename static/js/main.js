@@ -777,59 +777,64 @@ async function detectDartFromCamera() {
       statusEl.textContent = `Detected: ${label}`;
     }
 
-    // draw hit marker using camera coordinates, fallback if missing px/py
+    // --- Render hit marker (POLAR FIRST) ---
+    // Prefer polar coords from backend (post-warp). Fallback to pixels only if needed.
     let x, y;
+
+    const rect = overlay.getBoundingClientRect();
+    const { cx, cy, radius } = boardCenterAndRadius();
+    const cxLocal = cx - rect.left;
+    const cyLocal = cy - rect.top;
 
     if (
       data.hit &&
+      (typeof data.hit.angle_rad === "number" ||
+        typeof data.hit.angle_deg === "number") &&
+      typeof data.hit.r_frac === "number"
+    ) {
+      const ang =
+        typeof data.hit.angle_rad === "number"
+          ? data.hit.angle_rad
+          : (data.hit.angle_deg * Math.PI) / 180;
+
+      const r = Math.max(0, Math.min(1, data.hit.r_frac)) * radius;
+
+      x = cxLocal + Math.cos(ang) * r;
+      y = cyLocal + Math.sin(ang) * r;
+
+      console.debug("[UI][POLAR]", {
+        angle_rad: ang,
+        r_frac: data.hit.r_frac,
+        ui_x: x,
+        ui_y: y,
+      });
+    } else if (
       typeof data.hit.px === "number" &&
       typeof data.hit.py === "number"
     ) {
-      console.log("[DETECT] using pixel coords", data.hit.px, data.hit.py);
-
+      // Fallback ONLY if polar not present
       const camW = 2304;
       const camH = 1296;
-      console.debug("[CAM] using camera size", { camW, camH });
 
-      const rect = overlay.getBoundingClientRect();
-      const { cx, cy, radius } = boardCenterAndRadius();
-
-      // Convert board center to overlay-local space
-      const cxLocal = cx - rect.left;
-      const cyLocal = cy - rect.top;
-
-      // Camera-space center
-      const camCX = camW / 2;
-      const camCY = camH / 2;
-
-      // Delta from camera center
-      const dx = data.hit.px - camCX;
-      const dy = data.hit.py - camCY;
-
-      // Scale camera deltas into board space
+      const dx = data.hit.px - camW / 2;
+      const dy = data.hit.py - camH / 2;
       const scale = radius / Math.min(camW, camH);
 
-      // Final overlay-local coordinates
       x = cxLocal + dx * scale;
       y = cyLocal + dy * scale;
 
-      console.debug("[CAM→UI]", {
-        cam_px: data.hit.px,
-        cam_py: data.hit.py,
-        dx,
-        dy,
-        scale,
+      console.warn("[UI][FALLBACK PX]", {
+        px: data.hit.px,
+        py: data.hit.py,
         ui_x: x,
         ui_y: y,
       });
     } else {
-      const rect = overlay.getBoundingClientRect();
-      const { cx, cy } = boardCenterAndRadius();
-      x = cx - rect.left;
-      y = cy - rect.top;
+      // Absolute fallback: center
+      x = cxLocal;
+      y = cyLocal;
+      console.error("[UI] No coords provided, defaulting to center");
     }
-    // --- LOG overlay coords ---
-    console.log("[DETECT] overlay coords", x, y);
 
     // Camera: derive sector index using camera-specific rotation offset if needed
     // (If sectorIndexFromAngle is used here, apply CAM_ROT_OFFSET_DEG)

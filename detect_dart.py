@@ -80,6 +80,7 @@ DEFAULT_SRC_POINTS = np.float32([
     [890,  627],   # left
 ])
 
+#
 # Target points: where those 4 points would be on a perfect circle
 # centred at (BOARD_CX, BOARD_CY) with radius BOARD_RADIUS.
 DST_POINTS = np.float32([
@@ -88,6 +89,11 @@ DST_POINTS = np.float32([
     [BOARD_CX,               BOARD_CY + BOARD_RADIUS],  # bottom
     [BOARD_CX - BOARD_RADIUS, BOARD_CY],                # left
 ])
+
+# Warped board geometry (derived, not hard-coded)
+WARPED_BOARD_CX = BOARD_CX
+WARPED_BOARD_CY = BOARD_CY
+WARPED_BOARD_RADIUS = BOARD_RADIUS
 
 # This will be filled on first use, either from ArUco markers or from DEFAULT_SRC_POINTS.
 WARP_MATRIX = None
@@ -131,10 +137,10 @@ def sector_index_from_angle(angle: float) -> int:
 
 
 def pixel_to_polar(x: float, y: float):
-    dx = x - BOARD_CX
-    dy = y - BOARD_CY
+    dx = x - WARPED_BOARD_CX
+    dy = y - WARPED_BOARD_CY
     r = math.hypot(dx, dy)
-    r_frac = r / max(1.0, BOARD_RADIUS)
+    r_frac = r / max(1.0, WARPED_BOARD_RADIUS)
     angle = math.atan2(dy, dx)
     return r_frac, angle
 
@@ -192,21 +198,7 @@ def load_image(path: str):
     if CAMERA_UPSIDE_DOWN:
         img = cv2.rotate(img, cv2.ROTATE_180)
 
-    # Then optionally apply perspective warp to correct foreshortening.
-    if USE_WARP:
-        global WARP_MATRIX
-        h, w = img.shape[:2]
-
-        # Lazily initialise the warp matrix on first use.
-        if WARP_MATRIX is None:
-            M = _compute_warp_from_aruco(img)
-            if M is None:
-                # ArUco not available or markers not found → fall back to manual points.
-                M = cv2.getPerspectiveTransform(DEFAULT_SRC_POINTS, DST_POINTS)
-            WARP_MATRIX = M
-
-        img = cv2.warpPerspective(img, WARP_MATRIX, (w, h))
-
+    # Perspective warp is NOT applied here anymore; warp must happen in detect_impact.
     return img
 
 
@@ -460,7 +452,7 @@ def detect_impact(before_img, after_img):
     """High-level helper: given BEFORE and AFTER BGR images, return hit info.
 
     Returns a dict with keys:
-      - hit: dict with ring, sector, r_frac, angle_deg, x, y
+      - hit: dict with ring, sector, r_frac, angle_deg, angle_rad, r_frac
       - reason: string if no impact ("no_impact"), else None
     """
     # Apply perspective warp using ArUco if available
@@ -471,6 +463,12 @@ def detect_impact(before_img, after_img):
 
     warped_before = cv2.warpPerspective(before_img, M, (w, h))
     warped_after = cv2.warpPerspective(after_img, M, (w, h))
+    # After warp is applied, explicitly lock warped geometry
+    global WARPED_BOARD_CX, WARPED_BOARD_CY, WARPED_BOARD_RADIUS
+    WARPED_BOARD_CX = BOARD_CX
+    WARPED_BOARD_CY = BOARD_CY
+    WARPED_BOARD_RADIUS = BOARD_RADIUS
+    print(f"[WARP] Using warped board centre=({WARPED_BOARD_CX},{WARPED_BOARD_CY}) radius={WARPED_BOARD_RADIUS}")
 
     center, _ = find_dart_center(warped_before, warped_after)
 
@@ -479,9 +477,11 @@ def detect_impact(before_img, after_img):
 
     cx, cy = center
     info = classify_hit_with_debug(cx, cy)
-    info["x"] = cx
-    info["y"] = cy
+    # Remove pixel coordinates from payload, replace with angle_rad and r_frac only
+    info["angle_rad"] = math.atan2(cy - WARPED_BOARD_CY, cx - WARPED_BOARD_CX)
+    info["r_frac"] = info["r_frac"]
     print(f"[HIT] Estimated sector: {info['sector']}, type: {info['ring']}")
+    print(f"[WARP-HIT] r_frac={info['r_frac']:.3f} angle_deg={info['angle_deg']:.2f}")
 
     # If it landed off the board, treat as miss
     if info["ring"] == "miss" or info["sector"] is None:
