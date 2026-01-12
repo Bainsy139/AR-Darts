@@ -477,9 +477,9 @@ def detect_impact(before_img, after_img):
 
     cx, cy = center
     info = classify_hit_with_debug(cx, cy)
-    # Remove pixel coordinates from payload, replace with angle_rad and r_frac only
     info["angle_rad"] = math.atan2(cy - WARPED_BOARD_CY, cx - WARPED_BOARD_CX)
-    info["r_frac"] = info["r_frac"]
+    info["px"] = float(cx)
+    info["py"] = float(cy)
     print(f"[HIT] Estimated sector: {info['sector']}, type: {info['ring']}")
     print(f"[WARP-HIT] r_frac={info['r_frac']:.3f} angle_deg={info['angle_deg']:.2f}")
 
@@ -487,7 +487,19 @@ def detect_impact(before_img, after_img):
     if info["ring"] == "miss" or info["sector"] is None:
         return {"hit": None, "reason": "off_board"}
 
-    return {"hit": info, "reason": None}
+    print(f"[DEBUG][BACKEND] returning px={info['px']:.1f}, py={info['py']:.1f}")
+    return {
+        "hit": {
+            "ring": info["ring"],
+            "sector": info["sector"],
+            "r_frac": info["r_frac"],
+            "angle_deg": info["angle_deg"],
+            "angle_rad": info["angle_rad"],
+            "px": info["px"],
+            "py": info["py"],
+        },
+        "reason": None
+    }
 
 
 def draw_debug_overlay(input_path: str, output_path: str):
