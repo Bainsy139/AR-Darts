@@ -789,21 +789,28 @@ async function detectDartFromCamera() {
 
       const camW = 1920;
       const camH = 1080;
-      const rect = overlay.getBoundingClientRect();
 
-      // --- NEW pixel-to-overlay mapping ---
-      const board = boardCenterAndRadius();
+      const rect = overlay.getBoundingClientRect();
+      const { cx, cy, radius } = boardCenterAndRadius();
+
+      // Convert board center to overlay-local space
+      const cxLocal = cx - rect.left;
+      const cyLocal = cy - rect.top;
+
+      // Camera-space center
       const camCX = camW / 2;
       const camCY = camH / 2;
 
+      // Delta from camera center
       const dx = data.hit.px - camCX;
       const dy = data.hit.py - camCY;
 
-      // map camera deltas into overlay space using board radius
-      const scale = board.radius / Math.min(camW, camH);
+      // Scale camera deltas into board space
+      const scale = radius / Math.min(camW, camH);
 
-      x = board.cx + dx * scale;
-      y = board.cy + dy * scale;
+      // Final overlay-local coordinates
+      x = cxLocal + dx * scale;
+      y = cyLocal + dy * scale;
 
       console.debug("[CAM→UI]", {
         cam_px: data.hit.px,
