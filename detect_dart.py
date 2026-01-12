@@ -122,7 +122,11 @@ def sector_index_from_angle(angle: float) -> int:
     two_pi = 2 * math.pi
     a = (a % two_pi + two_pi) % two_pi
     idx = int(math.floor(a / two_pi * 20)) % 20
-    print(f"[DEBUG] sector_index_from_angle: angle={angle:.4f} rad, a={a:.4f}, idx={idx}")
+    print(
+        f"[DEBUG][ANGLE] input_rad={angle:.4f} | "
+        f"rot_deg={SECTOR_ROT_OFFSET_DEG} | "
+        f"final_rad={a:.4f} | idx={idx}"
+    )
     return idx
 
 
@@ -142,7 +146,6 @@ def classify_hit_with_debug(x: float, y: float):
     """
     r_frac, angle_radians = pixel_to_polar(x, y)
     raw_deg = math.degrees(angle_radians) % 360
-    corrected_deg = (raw_deg + SECTOR_ROT_OFFSET_DEG) % 360
 
     ring = ring_from_radius_frac(r_frac)
     if ring == "miss":
@@ -154,8 +157,11 @@ def classify_hit_with_debug(x: float, y: float):
     print(
         f"[DEBUG] Tip at ({x:.1f}, {y:.1f}) | "
         f"raw_angle={raw_deg:.2f}° | "
-        f"corrected={corrected_deg:.2f}° | "
         f"sector={sector}"
+    )
+    print(
+        f"[DEBUG] Rotation applied ONLY in sector_index_from_angle | "
+        f"SECTOR_ROT_OFFSET_DEG={SECTOR_ROT_OFFSET_DEG}"
     )
 
     return {
