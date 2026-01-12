@@ -787,8 +787,9 @@ async function detectDartFromCamera() {
     ) {
       console.log("[DETECT] using pixel coords", data.hit.px, data.hit.py);
 
-      const camW = 1920;
-      const camH = 1080;
+      const camW = 2304;
+      const camH = 1296;
+      console.debug("[CAM] using camera size", { camW, camH });
 
       const rect = overlay.getBoundingClientRect();
       const { cx, cy, radius } = boardCenterAndRadius();
