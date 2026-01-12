@@ -440,6 +440,7 @@ def find_dart_center(before_img, after_img, debug_img=None):
         i = int(np.argmin(ys))
         tip_x = float(xs[i])
         tip_y = float(ys[i])
+        print("[DETECT][FALLBACK] PCA tip failed – using topmost pixel fallback")
 
     # Draw tip if requested
     if debug_img is not None:
@@ -455,11 +456,16 @@ def detect_impact(before_img, after_img):
       - hit: dict with ring, sector, r_frac, angle_deg, angle_rad, r_frac
       - reason: string if no impact ("no_impact"), else None
     """
+    # 4) Add hard assertion for board geometry mismatch
+    assert BOARD_RADIUS > 0, "[CONFIG ERROR] BOARD_RADIUS must be > 0"
+
     # Apply perspective warp using ArUco if available
     h, w = before_img.shape[:2]
     M = _compute_warp_from_aruco(before_img)
     if M is None:
         M = cv2.getPerspectiveTransform(DEFAULT_SRC_POINTS, DST_POINTS)
+
+    print(f"[WARP] matrix used:\n{M}")
 
     warped_before = cv2.warpPerspective(before_img, M, (w, h))
     warped_after = cv2.warpPerspective(after_img, M, (w, h))
@@ -487,14 +493,18 @@ def detect_impact(before_img, after_img):
     if info["ring"] == "miss" or info["sector"] is None:
         return {"hit": None, "reason": "off_board"}
 
-    print(f"[DEBUG][BACKEND] returning px={info['px']:.1f}, py={info['py']:.1f}")
+    print(
+        f"[BACKEND FINAL] px={info['px']:.1f}, py={info['py']:.1f}, "
+        f"r_frac={info['r_frac']:.3f}, angle_deg={info['angle_deg']:.2f}, "
+        f"sector={info['sector']}, ring={info['ring']}"
+    )
     return {
         "hit": {
             "ring": info["ring"],
             "sector": info["sector"],
             "r_frac": info["r_frac"],
-            "angle_deg": info["angle_deg"],
             "angle_rad": info["angle_rad"],
+            "angle_deg": info["angle_deg"],
             "px": info["px"],
             "py": info["py"],
         },
