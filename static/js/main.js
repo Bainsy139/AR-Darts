@@ -546,6 +546,13 @@ function hookCalibrationPanel() {
   const dx = document.getElementById("cal-dx");
   const dy = document.getElementById("cal-dy");
   const rot = document.getElementById("cal-rot");
+  // --- Force calibration controls to numeric inputs (typed values, no sliders) ---
+  [rx, dx, dy, rot].forEach((el) => {
+    if (!el) return;
+    el.type = "number";
+    el.step = "any";
+    el.inputMode = "decimal";
+  });
   const tog = document.getElementById("cal-toggle");
   const imgRot = document.getElementById("cal-img-rot");
   const imgRotVal = document.getElementById("cal-img-rot-val");
@@ -584,6 +591,11 @@ function hookCalibrationPanel() {
   dx.value = CENTER_X_FUDGE;
   dy.value = CENTER_Y_FUDGE;
   rot.value = ROT_OFFSET_DEG;
+  rx.min = "0.5";
+  rx.max = "1.2";
+  dx.step = "1";
+  dy.step = "1";
+  rot.step = "0.1";
   if (imgRot) imgRot.value = BOARD_IMG_ROT_DEG;
   if (imgScale) imgScale.value = BOARD_IMG_SCALE;
   if (imgDx) imgDx.value = BOARD_IMG_OFFSET_X;
