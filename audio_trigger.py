@@ -27,6 +27,10 @@ SAMPLE_RATE = 44100
 CHUNK = 1024                # frames per buffer
 RMS_THRESHOLD = 0.008       # trigger threshold
 COOLDOWN_SEC = 0.4          # minimum time between triggers
+SETTLE_SEC = 0.30           # wait after impact before detection (dart vibration settle)
+RETRY_ON_NO_IMPACT = True   # one retry if vision says "no_impact"
+RETRY_DELAY_SEC = 0.20      # extra wait before retry
+DEBUG_RMS = False           # set True to print live RMS
 SERVER_BASE = "http://127.0.0.1:5050"
 
 CAPTURE_BEFORE_ENDPOINT = f"{SERVER_BASE}/capture-before"
@@ -55,13 +59,19 @@ def rms_from_bytes(data: bytes) -> float:
     return math.sqrt(square_sum / count)
 
 def post(endpoint: str):
-    """POST helper with basic error handling."""
+    """POST helper with basic error handling. Returns (ok, json_or_none)."""
     try:
-        r = requests.post(endpoint, timeout=2)
+        r = requests.post(endpoint, timeout=5)
         if r.status_code != 200:
             print(f"[WARN] {endpoint} -> {r.status_code}")
+            return False, None
+        try:
+            return True, r.json()
+        except Exception:
+            return True, None
     except Exception as e:
         print(f"[ERROR] POST {endpoint}: {e}")
+        return False, None
 
 def handle_spike():
     global busy
@@ -72,8 +82,23 @@ def handle_spike():
 
     print("[SPIKE] Dart impact detected")
 
-    # Run detect, then immediately capture-before again
-    post(DETECT_ENDPOINT)
+    # Let the dart settle before we take the "after" frame inside /detect
+    time.sleep(SETTLE_SEC)
+
+    ok, data = post(DETECT_ENDPOINT)
+
+    # If we fired too early, /detect may respond with no_impact. Retry once after a short delay.
+    if RETRY_ON_NO_IMPACT and ok and isinstance(data, dict):
+        reason = None
+        try:
+            reason = data.get("reason") or (data.get("result") or {}).get("reason")
+        except Exception:
+            reason = None
+        if reason == "no_impact":
+            time.sleep(RETRY_DELAY_SEC)
+            post(DETECT_ENDPOINT)
+
+    # Refresh baseline for the next dart
     post(CAPTURE_BEFORE_ENDPOINT)
 
     with lock:
@@ -108,7 +133,8 @@ def main():
         while True:
             data = stream.read(CHUNK, exception_on_overflow=False)
             rms = rms_from_bytes(data)
-            print(f"RMS={rms:.4f}")
+            if DEBUG_RMS:
+                print(f"RMS={rms:.4f}")
 
             now = time.time()
             if rms >= RMS_THRESHOLD and (now - last_trigger_time) >= COOLDOWN_SEC:
