@@ -460,10 +460,16 @@ def detect_impact(before_img, after_img):
     assert BOARD_RADIUS > 0, "[CONFIG ERROR] BOARD_RADIUS must be > 0"
 
     # Apply perspective warp using ArUco if available
+    # Compute the warp matrix once and reuse it so BEFORE/AFTER are comparable frame-to-frame.
+    global WARP_MATRIX
     h, w = before_img.shape[:2]
-    M = _compute_warp_from_aruco(before_img)
-    if M is None:
-        M = cv2.getPerspectiveTransform(DEFAULT_SRC_POINTS, DST_POINTS)
+    if WARP_MATRIX is None:
+        M = _compute_warp_from_aruco(before_img)
+        if M is None:
+            M = cv2.getPerspectiveTransform(DEFAULT_SRC_POINTS, DST_POINTS)
+        WARP_MATRIX = M
+    else:
+        M = WARP_MATRIX
 
     print(f"[WARP] matrix used:\n{M}")
 
