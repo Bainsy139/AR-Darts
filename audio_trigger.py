@@ -25,12 +25,12 @@ import pyaudio
 AUDIO_DEVICE_INDEX = None   # None = default input (USB mic already set as capture)
 SAMPLE_RATE = 44100
 CHUNK = 1024                # frames per buffer
-RMS_THRESHOLD = 0.008       # trigger threshold
+RMS_THRESHOLD = 0.015       # trigger threshold
 COOLDOWN_SEC = 0.4          # minimum time between triggers
 SETTLE_SEC = 0.30           # wait after impact before detection (dart vibration settle)
 RETRY_ON_NO_IMPACT = True   # one retry if vision says "no_impact"
 RETRY_DELAY_SEC = 0.20      # extra wait before retry
-DEBUG_RMS = False           # set True to print live RMS
+DEBUG_RMS = True           # set True to print live RMS
 SERVER_BASE = "http://127.0.0.1:5050"
 
 CAPTURE_BEFORE_ENDPOINT = f"{SERVER_BASE}/capture-before"

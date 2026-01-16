@@ -71,14 +71,6 @@ CAMERA_UPSIDE_DOWN = True
 USE_WARP = True
 USE_ARUCO_WARP = True  # try to refine the warp matrix from ArUco markers if available
 
-# Default source points: manual estimate of the outer double ring top/right/bottom/left.
-# These are used as a fallback when ArUco-based calibration is not available.
-DEFAULT_SRC_POINTS = np.float32([
-    [1039, 483],   # top
-    [1195, 617],   # right
-    [1045, 738],   # bottom
-    [890,  627],   # left
-])
 
 #
 # Target points: where those 4 points would be on a perfect circle
@@ -466,7 +458,8 @@ def detect_impact(before_img, after_img):
     if WARP_MATRIX is None:
         M = _compute_warp_from_aruco(before_img)
         if M is None:
-            M = cv2.getPerspectiveTransform(DEFAULT_SRC_POINTS, DST_POINTS)
+            print("[WARP] No ArUco warp available and no manual fallback configured.")
+            return {"hit": None, "reason": "no_aruco_warp"}
         WARP_MATRIX = M
     else:
         M = WARP_MATRIX
@@ -627,39 +620,37 @@ def main():
             after = cv2.rotate(after, cv2.ROTATE_180)
             overlay = cv2.rotate(overlay, cv2.ROTATE_180)
 
-        # Compute warp matrix (possibly from ArUco)
+        # Compute warp matrix (must be from ArUco)
         h, w = before.shape[:2]
         M = _compute_warp_from_aruco(before)
         if M is None:
-            M = cv2.getPerspectiveTransform(DEFAULT_SRC_POINTS, DST_POINTS)
-        if M is not None:
-            warped_before = cv2.warpPerspective(before, M, (w, h))
-            warped_after = cv2.warpPerspective(after, M, (w, h))
-            warped_overlay = cv2.warpPerspective(overlay, M, (w, h))
-            # Use find_dart_center to get edge pixels
-            hit_point, edges = find_dart_center(warped_before, warped_after, warped_overlay)
-            print(f"DEBUG: Estimated tip @ {hit_point}")
-            after_img = warped_after.copy()
-            center = (int(round(BOARD_CX)), int(round(BOARD_CY)))
-            # hit_point is already the strict topmost pixel from the blob mask
-            if hit_point is not None:
-                tip_xy = (int(round(hit_point[0])), int(round(hit_point[1])))
-                cv2.circle(after_img, tip_xy, 8, (0, 0, 255), 2)
-            # Draw sector lines in blue
-            SECTOR_ANGLE = 18
-            for i in range(20):
-                angle = math.radians(i * SECTOR_ANGLE)
-                x2 = int(center[0] + 1000 * math.cos(angle))
-                y2 = int(center[1] - 1000 * math.sin(angle))
-                cv2.line(after_img, center, (x2, y2), (255, 0, 0), 1)
-            # Save with timestamped filename
-            timestamp = datetime.datetime.now().strftime("%H%M%S")
-            cv2.imwrite(f"overlay_debug_{timestamp}.jpg", after_img)
-            print(f"Overlay+hit written to overlay_debug_{timestamp}.jpg")
-            sys.exit(0)
-        else:
+            print("[WARP] No ArUco warp available and no manual fallback configured.")
             print("Could not compute perspective warp, aborting overlayhit.")
             sys.exit(1)
+        warped_before = cv2.warpPerspective(before, M, (w, h))
+        warped_after = cv2.warpPerspective(after, M, (w, h))
+        warped_overlay = cv2.warpPerspective(overlay, M, (w, h))
+        # Use find_dart_center to get edge pixels
+        hit_point, edges = find_dart_center(warped_before, warped_after, warped_overlay)
+        print(f"DEBUG: Estimated tip @ {hit_point}")
+        after_img = warped_after.copy()
+        center = (int(round(BOARD_CX)), int(round(BOARD_CY)))
+        # hit_point is already the strict topmost pixel from the blob mask
+        if hit_point is not None:
+            tip_xy = (int(round(hit_point[0])), int(round(hit_point[1])))
+            cv2.circle(after_img, tip_xy, 8, (0, 0, 255), 2)
+        # Draw sector lines in blue
+        SECTOR_ANGLE = 18
+        for i in range(20):
+            angle = math.radians(i * SECTOR_ANGLE)
+            x2 = int(center[0] + 1000 * math.cos(angle))
+            y2 = int(center[1] - 1000 * math.sin(angle))
+            cv2.line(after_img, center, (x2, y2), (255, 0, 0), 1)
+        # Save with timestamped filename
+        timestamp = datetime.datetime.now().strftime("%H%M%S")
+        cv2.imwrite(f"overlay_debug_{timestamp}.jpg", after_img)
+        print(f"Overlay+hit written to overlay_debug_{timestamp}.jpg")
+        sys.exit(0)
 
     # Support for "aruco" mode
     if len(sys.argv) >= 2 and sys.argv[1] == "aruco":
@@ -756,7 +747,8 @@ def estimate_tip(before_img, after_img, debug_img=None):
     # Compute warp matrix (possibly from ArUco)
     M = _compute_warp_from_aruco(before_img)
     if M is None:
-        M = cv2.getPerspectiveTransform(DEFAULT_SRC_POINTS, DST_POINTS)
+        print("[WARP] No ArUco warp available and no manual fallback configured.")
+        return None
     h, w = before_img.shape[:2]
     warped_before = cv2.warpPerspective(before_img, M, (w, h))
     warped_after = cv2.warpPerspective(after_img, M, (w, h))

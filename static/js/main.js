@@ -17,51 +17,6 @@ try {
 // Persist whether the calibration panel is shown
 const CAL_UI_KEY = "ardarts.calui";
 
-// ---- Persist calibration between sessions ----
-const CAL_KEY = "ardarts.cal";
-function getSavedCal() {
-  try {
-    return JSON.parse(localStorage.getItem(CAL_KEY) || "{}");
-  } catch (_) {
-    return {};
-  }
-}
-function saveCal() {
-  try {
-    localStorage.setItem(
-      CAL_KEY,
-      JSON.stringify({
-        R: BOARD_RADIUS_FUDGE,
-        CX: CENTER_X_FUDGE,
-        CY: CENTER_Y_FUDGE,
-        ROT: ROT_OFFSET_DEG,
-        IMG_ROT: BOARD_IMG_ROT_DEG,
-        IMG_SCALE: BOARD_IMG_SCALE,
-        IMG_X: BOARD_IMG_OFFSET_X,
-        IMG_Y: BOARD_IMG_OFFSET_Y,
-      })
-    );
-  } catch (_) {}
-}
-
-// --- Calibration save confirmation and button wiring ---
-function stampSaved(msg = "Saved") {
-  const el = document.getElementById("cal-saved");
-  if (!el) return;
-  el.textContent = msg + " • " + new Date().toLocaleTimeString();
-  setTimeout(() => {
-    el.textContent = "";
-  }, 2500);
-}
-
-(function wireCalSave() {
-  const btn = document.getElementById("cal-save");
-  if (!btn) return;
-  btn.addEventListener("click", () => {
-    saveCal();
-    stampSaved();
-  });
-})();
 function loadCalUi() {
   try {
     return JSON.parse(localStorage.getItem(CAL_UI_KEY) || "false");
@@ -133,16 +88,7 @@ let game = {
   winner: null,
 };
 
-// --- Calibration knobs (tweak live with arrow keys) ---
-let BOARD_RADIUS_FUDGE = 0.92;
-let CENTER_X_FUDGE = 0;
-let CENTER_Y_FUDGE = 0;
-
-// Sector math / hit detection rotation
-let ROT_OFFSET_DEG = 2;
-let CAM_ROT_OFFSET_DEG = 18; // camera-only sector alignment
-
-// Visual-only board image rotation
+// --- Visual-only board image alignment controls ---
 let BOARD_IMG_ROT_DEG = 0;
 let BOARD_IMG_SCALE = 1.0;
 let BOARD_IMG_OFFSET_X = 0;
@@ -150,13 +96,15 @@ let BOARD_IMG_OFFSET_Y = 0;
 let turnMarks = [];
 // Initial visibility of guides / panel from storage
 let SHOW_CAL_PANEL = loadCalUi();
-// Apply any saved calibration
+// Apply any saved calibration (visual-only)
 (function applySavedCal() {
-  const s = getSavedCal();
-  if (typeof s.R === "number") BOARD_RADIUS_FUDGE = s.R;
-  if (typeof s.CX === "number") CENTER_X_FUDGE = s.CX;
-  if (typeof s.CY === "number") CENTER_Y_FUDGE = s.CY;
-  if (typeof s.ROT === "number") ROT_OFFSET_DEG = s.ROT;
+  const s = (() => {
+    try {
+      return JSON.parse(localStorage.getItem("ardarts.cal") || "{}");
+    } catch (_) {
+      return {};
+    }
+  })();
   if (typeof s.IMG_ROT === "number") BOARD_IMG_ROT_DEG = s.IMG_ROT;
   if (typeof s.IMG_SCALE === "number") BOARD_IMG_SCALE = s.IMG_SCALE;
   if (typeof s.IMG_X === "number") BOARD_IMG_OFFSET_X = s.IMG_X;
@@ -377,21 +325,10 @@ function sectorIndexFromAngle(a, rotDeg = ROT_OFFSET_DEG) {
 
 function boardCenterAndRadius() {
   const r = board.getBoundingClientRect();
-
-  // Add board image offsets (scaled) to center
-  const cx =
-    (r.left + r.right) / 2 +
-    CENTER_X_FUDGE +
-    BOARD_IMG_OFFSET_X * BOARD_IMG_SCALE;
-  const cy =
-    (r.top + r.bottom) / 2 +
-    CENTER_Y_FUDGE +
-    BOARD_IMG_OFFSET_Y * BOARD_IMG_SCALE;
-
-  // Compensate for CSS scale so math matches visuals
-  const visualRadius = Math.min(r.width, r.height) / 2;
-  const radius = (visualRadius / (BOARD_IMG_SCALE || 1)) * BOARD_RADIUS_FUDGE;
-
+  // Calculate center based on DOM geometry and image transform offsets only
+  const cx = (r.left + r.right) / 2 + BOARD_IMG_OFFSET_X * BOARD_IMG_SCALE;
+  const cy = (r.top + r.bottom) / 2 + BOARD_IMG_OFFSET_Y * BOARD_IMG_SCALE;
+  const radius = Math.min(r.width, r.height) / 2 / (BOARD_IMG_SCALE || 1);
   return { cx, cy, radius };
 }
 
@@ -542,17 +479,6 @@ function drawATWTargetHighlight(cxLocal, cyLocal, radius) {
   ctx.restore();
 }
 function hookCalibrationPanel() {
-  const rx = document.getElementById("cal-radius");
-  const dx = document.getElementById("cal-dx");
-  const dy = document.getElementById("cal-dy");
-  const rot = document.getElementById("cal-rot");
-  // --- Force calibration controls to numeric inputs (typed values, no sliders) ---
-  [rx, dx, dy, rot].forEach((el) => {
-    if (!el) return;
-    el.type = "number";
-    el.step = "any";
-    el.inputMode = "decimal";
-  });
   const tog = document.getElementById("cal-toggle");
   const imgRot = document.getElementById("cal-img-rot");
   const imgRotVal = document.getElementById("cal-img-rot-val");
@@ -562,7 +488,7 @@ function hookCalibrationPanel() {
   const imgDy = document.getElementById("cal-img-y");
   const imgDxVal = document.getElementById("cal-img-x-val");
   const imgDyVal = document.getElementById("cal-img-y-val");
-  if (!rx || !dx || !dy || !rot || !tog) return; // panel not present
+  if (!tog) return; // panel not present
   if (panel) {
     panel.classList.toggle("hidden", !SHOW_CAL_PANEL);
   }
@@ -573,29 +499,12 @@ function hookCalibrationPanel() {
       saveCalUi(SHOW_CAL_PANEL);
     });
   }
-  const rVal = document.getElementById("cal-r-val");
-  const dxVal = document.getElementById("cal-dx-val");
-  const dyVal = document.getElementById("cal-dy-val");
-  const rotVal = document.getElementById("cal-rot-val");
   const sync = () => {
-    if (rVal) rVal.textContent = BOARD_RADIUS_FUDGE.toFixed(3);
-    if (dxVal) dxVal.textContent = CENTER_X_FUDGE;
-    if (dyVal) dyVal.textContent = CENTER_Y_FUDGE;
-    if (rotVal) rotVal.textContent = ROT_OFFSET_DEG.toFixed(1);
     if (imgRotVal) imgRotVal.textContent = BOARD_IMG_ROT_DEG.toFixed(1);
     if (imgScaleVal) imgScaleVal.textContent = BOARD_IMG_SCALE.toFixed(3);
     if (imgDxVal) imgDxVal.textContent = BOARD_IMG_OFFSET_X;
     if (imgDyVal) imgDyVal.textContent = BOARD_IMG_OFFSET_Y;
   };
-  rx.value = BOARD_RADIUS_FUDGE.toFixed(3);
-  dx.value = CENTER_X_FUDGE;
-  dy.value = CENTER_Y_FUDGE;
-  rot.value = ROT_OFFSET_DEG;
-  rx.min = "0.5";
-  rx.max = "1.2";
-  dx.step = "1";
-  dy.step = "1";
-  rot.step = "0.1";
   if (imgRot) imgRot.value = BOARD_IMG_ROT_DEG;
   if (imgScale) imgScale.value = BOARD_IMG_SCALE;
   if (imgDx) imgDx.value = BOARD_IMG_OFFSET_X;
@@ -605,36 +514,22 @@ function hookCalibrationPanel() {
     // no-op
   }
   sync();
-  rx.addEventListener("input", () => {
-    BOARD_RADIUS_FUDGE = parseFloat(rx.value);
-    drawFade();
-    sync();
-    saveCal();
-  });
-  dx.addEventListener("input", () => {
-    CENTER_X_FUDGE = parseInt(dx.value || "0");
-    drawFade();
-    sync();
-    saveCal();
-  });
-  dy.addEventListener("input", () => {
-    CENTER_Y_FUDGE = parseInt(dy.value || "0");
-    drawFade();
-    sync();
-    saveCal();
-  });
-  rot.addEventListener("input", () => {
-    ROT_OFFSET_DEG = parseFloat(rot.value) || 0;
-    drawFade(); // keep overlay + highlights aligned
-    sync();
-    saveCal();
-  });
   if (imgRot) {
     imgRot.addEventListener("input", () => {
       BOARD_IMG_ROT_DEG = parseFloat(imgRot.value) || 0;
       applyBoardRotation();
       sync();
-      saveCal();
+      try {
+        localStorage.setItem(
+          "ardarts.cal",
+          JSON.stringify({
+            IMG_ROT: BOARD_IMG_ROT_DEG,
+            IMG_SCALE: BOARD_IMG_SCALE,
+            IMG_X: BOARD_IMG_OFFSET_X,
+            IMG_Y: BOARD_IMG_OFFSET_Y,
+          })
+        );
+      } catch (_) {}
     });
   }
   if (imgScale) {
@@ -642,7 +537,17 @@ function hookCalibrationPanel() {
       BOARD_IMG_SCALE = parseFloat(imgScale.value) || 1.0;
       applyBoardTransform();
       sync();
-      saveCal();
+      try {
+        localStorage.setItem(
+          "ardarts.cal",
+          JSON.stringify({
+            IMG_ROT: BOARD_IMG_ROT_DEG,
+            IMG_SCALE: BOARD_IMG_SCALE,
+            IMG_X: BOARD_IMG_OFFSET_X,
+            IMG_Y: BOARD_IMG_OFFSET_Y,
+          })
+        );
+      } catch (_) {}
     });
   }
   if (imgDx) {
@@ -650,22 +555,40 @@ function hookCalibrationPanel() {
       BOARD_IMG_OFFSET_X = parseInt(imgDx.value || "0");
       applyBoardTransform();
       sync();
-      saveCal();
+      try {
+        localStorage.setItem(
+          "ardarts.cal",
+          JSON.stringify({
+            IMG_ROT: BOARD_IMG_ROT_DEG,
+            IMG_SCALE: BOARD_IMG_SCALE,
+            IMG_X: BOARD_IMG_OFFSET_X,
+            IMG_Y: BOARD_IMG_OFFSET_Y,
+          })
+        );
+      } catch (_) {}
     });
   }
-
   if (imgDy) {
     imgDy.addEventListener("input", () => {
       BOARD_IMG_OFFSET_Y = parseInt(imgDy.value || "0");
       applyBoardTransform();
       sync();
-      saveCal();
+      try {
+        localStorage.setItem(
+          "ardarts.cal",
+          JSON.stringify({
+            IMG_ROT: BOARD_IMG_ROT_DEG,
+            IMG_SCALE: BOARD_IMG_SCALE,
+            IMG_X: BOARD_IMG_OFFSET_X,
+            IMG_Y: BOARD_IMG_OFFSET_Y,
+          })
+        );
+      } catch (_) {}
     });
   }
   tog.addEventListener("change", () => {
     SHOW_GUIDES = !!tog.checked;
     drawFade();
-    saveCal();
   });
 }
 
@@ -1487,58 +1410,6 @@ function handleClick(e) {
   console.log("CLICK", { x, y, ring, secIdx, sectorNum });
   logToServer({ ring, sectorIndex: secIdx, px: x, py: y });
 }
-
-// Simple live calibration with arrow keys and +/-
-window.addEventListener("keydown", (e) => {
-  let changed = false;
-  const stepPx = 1;
-  const stepRad = 0.005;
-  switch (e.key) {
-    case "ArrowLeft":
-      CENTER_X_FUDGE -= stepPx;
-      changed = true;
-      break;
-    case "ArrowRight":
-      CENTER_X_FUDGE += stepPx;
-      changed = true;
-      break;
-    case "ArrowUp":
-      CENTER_Y_FUDGE -= stepPx;
-      changed = true;
-      break;
-    case "ArrowDown":
-      CENTER_Y_FUDGE += stepPx;
-      changed = true;
-      break;
-    case "+":
-    case "=":
-      BOARD_RADIUS_FUDGE += stepRad;
-      changed = true;
-      break;
-    case "-":
-      BOARD_RADIUS_FUDGE -= stepRad;
-      changed = true;
-      break;
-    case "[":
-      BOARD_IMG_ROT_DEG -= 0.5;
-      changed = true;
-      break;
-    case "]":
-      BOARD_IMG_ROT_DEG += 0.5;
-      changed = true;
-      break;
-  }
-  if (changed) {
-    applyBoardRotation();
-    drawFade();
-    statusEl.textContent = `Cal: R=${BOARD_RADIUS_FUDGE.toFixed(
-      3
-    )}  dx=${CENTER_X_FUDGE}  dy=${CENTER_Y_FUDGE}  rot=${ROT_OFFSET_DEG.toFixed(
-      1
-    )}°`;
-    saveCal();
-  }
-});
 
 window.addEventListener("resize", resizeOverlay);
 window.addEventListener("DOMContentLoaded", () => {

@@ -120,6 +120,13 @@ def detect():
         return jsonify({"ok": False, "error": "load_failed"}), 500
 
     result = detect_dart.detect_impact(before, after)
+    if result.get("reason") == "no_aruco_warp":
+        print("[DETECT] ArUco calibration missing or failed.")
+        return jsonify({
+            "ok": False,
+            "error": "calibration_failed",
+            "message": "ArUco calibration not available. Check markers and calibration setup."
+        }), 500
     print("[DEBUG] Raw detect_dart result:", result)
     # Save debug overlay with hit circle
     hit_info = result.get("hit")

@@ -1,9 +1,8 @@
-
-
-
 import cv2
 import numpy as np
 import math
+
+rotation_offset_deg = -7  # CCW correction
 
 # Load warped image and bullseye origin
 img = cv2.imread("warped_board.jpg")
@@ -25,7 +24,7 @@ for r in rings:
 
 # Draw 20 sector lines (every 18°)
 for i in range(20):
-    angle_deg = i * 18
+    angle_deg = i * 18 + rotation_offset_deg
     angle_rad = math.radians(angle_deg)
     x = int(cx + double_outer * math.cos(angle_rad))
     y = int(cy + double_outer * math.sin(angle_rad))
