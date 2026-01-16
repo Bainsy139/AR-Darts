@@ -18,13 +18,14 @@ if ids is None or len(ids) != 4:
 # Map marker IDs to their corners
 marker_map = {id[0]: corner for id, corner in zip(ids, corners)}
 
-# Define desired destination coordinates (e.g., 800x800 square)
-warp_size = 800
+# Define desired destination coordinates (e.g., 1600x848 rectangle)
+warp_width = 1600
+warp_height = 848
 dst_pts = np.array([
     [0, 0],                     # top-left
-    [warp_size, 0],             # top-right
-    [warp_size, warp_size],     # bottom-right
-    [0, warp_size],             # bottom-left
+    [warp_width, 0],           # top-right
+    [warp_width, warp_height], # bottom-right
+    [0, warp_height],          # bottom-left
 ], dtype=np.float32)
 
 # Match source points using YOUR marker layout
@@ -40,7 +41,7 @@ src_pts = np.array([
 matrix = cv2.getPerspectiveTransform(src_pts, dst_pts)
 
 # Apply warp
-warped = cv2.warpPerspective(img, matrix, (warp_size, warp_size))
+warped = cv2.warpPerspective(img, matrix, (warp_width, warp_height))
 
 # Save result
 cv2.imwrite("warped_board.jpg", warped)
