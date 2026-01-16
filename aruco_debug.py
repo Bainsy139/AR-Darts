@@ -2,7 +2,7 @@ import cv2
 import cv2.aruco as aruco
 
 # Load the image
-img = cv2.imread("after.jpeg")
+img = cv2.imread("after.jpg")
 
 # Setup detector
 aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
