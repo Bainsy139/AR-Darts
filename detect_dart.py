@@ -26,7 +26,7 @@ BOARD_RADIUS = 130  # pixels from centre to outer double ring edge (tweak if ove
 # Sector rotation offset (degrees).
 # This is the ONLY place sector alignment is corrected.
 # Positive values rotate counter-clockwise.
-SECTOR_ROT_OFFSET_DEG = -18.0
+SECTOR_ROT_OFFSET_DEG = 0.0
 
 # Rough ring ratios – we’ll refine later
 def ring_from_radius_frac(r_frac: float) -> str:
