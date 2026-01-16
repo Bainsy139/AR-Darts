@@ -124,11 +124,11 @@ def detect():
     # Save debug overlay with hit circle
     hit_info = result.get("hit")
     if hit_info:
-        print(f"[DEBUG] Raw hit pixels: x={hit_info.get('x')} y={hit_info.get('y')}")
-    if hit_info and 'x' in hit_info and 'y' in hit_info:
+        print(f"[DEBUG] Raw hit pixels: px={hit_info.get('px')} py={hit_info.get('py')}")
+    if hit_info and 'px' in hit_info and 'py' in hit_info:
         debug_overlay = after.copy()
         import cv2
-        cv2.circle(debug_overlay, (int(hit_info['x']), int(hit_info['y'])), 10, (0, 0, 255), 2)
+        cv2.circle(debug_overlay, (int(hit_info['px']), int(hit_info['py'])), 10, (0, 0, 255), 2)
         cv2.imwrite("last_overlay_debug.jpg", debug_overlay)
 
     reason = result.get("reason")
@@ -147,8 +147,8 @@ def detect():
 
     ring = hit_info.get("ring")
     sector = hit_info.get("sector")
-    cx = float(hit_info.get("x", 0.0))
-    cy = float(hit_info.get("y", 0.0))
+    cx = float(hit_info.get("px", 0.0))
+    cy = float(hit_info.get("py", 0.0))
 
     px = cx
     py = cy
