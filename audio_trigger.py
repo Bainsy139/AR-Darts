@@ -25,7 +25,7 @@ import pyaudio
 AUDIO_DEVICE_INDEX = None   # None = default input (USB mic already set as capture)
 SAMPLE_RATE = 44100
 CHUNK = 1024                # frames per buffer
-RMS_THRESHOLD = 0.015       # trigger threshold
+RMS_THRESHOLD = 0.1       # trigger threshold
 COOLDOWN_SEC = 0.4          # minimum time between triggers
 SETTLE_SEC = 0.30           # wait after impact before detection (dart vibration settle)
 RETRY_ON_NO_IMPACT = True   # one retry if vision says "no_impact"
