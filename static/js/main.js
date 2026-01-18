@@ -3,6 +3,7 @@ const SECTORS = [
   20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5,
 ];
 
+const ROT_OFFSET_DEG = 0.0; // This value must match SECTOR_ROT_OFFSET_DEG in detect_dart.py
 // ---- Boot parameters from server (no behaviour change) ----
 const __BOOT__ =
   typeof window !== "undefined" && window.GAME_BOOT ? window.GAME_BOOT : {};
