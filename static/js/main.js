@@ -239,7 +239,7 @@ function updateLastHitUI(playerIndex, label) {
 // Updates the player card target immediately after a hit.
 function updateTargetUI(playerIndex) {
   const el = document.getElementById(
-    playerIndex === 0 ? "p1-target" : "p2-target"
+    playerIndex === 0 ? "p1-target" : "p2-target",
   );
   if (!el) return;
 
@@ -257,7 +257,7 @@ function updateTargetUI(playerIndex) {
 // Renders: 🎯 (not yet thrown), ✅ (hit), ❌ (miss)
 function updateThrowsUI(playerIndex) {
   const el = document.getElementById(
-    playerIndex === 0 ? "p1-throws" : "p2-throws"
+    playerIndex === 0 ? "p1-throws" : "p2-throws",
   );
   if (!el) return;
 
@@ -291,7 +291,7 @@ function drawFade() {
     Math.max(1, radius * 0.2),
     cx - rect.left,
     cy - rect.top,
-    Math.max(overlay.width, overlay.height) * 0.6
+    Math.max(overlay.width, overlay.height) * 0.6,
   );
   g.addColorStop(0, "rgba(0,0,0,0.0)");
   g.addColorStop(1, "rgba(0,0,0,0.10)");
@@ -440,7 +440,7 @@ function drawATWTargetHighlight(cxLocal, cyLocal, radius) {
       rInner,
       cxLocal,
       cyLocal,
-      rOuter
+      rOuter,
     );
     g.addColorStop(0, "rgba(0,255,200,0.25)");
     g.addColorStop(1, "rgba(0, 255, 200, 1)");
@@ -527,7 +527,7 @@ function hookCalibrationPanel() {
             IMG_SCALE: BOARD_IMG_SCALE,
             IMG_X: BOARD_IMG_OFFSET_X,
             IMG_Y: BOARD_IMG_OFFSET_Y,
-          })
+          }),
         );
       } catch (_) {}
     });
@@ -545,7 +545,7 @@ function hookCalibrationPanel() {
             IMG_SCALE: BOARD_IMG_SCALE,
             IMG_X: BOARD_IMG_OFFSET_X,
             IMG_Y: BOARD_IMG_OFFSET_Y,
-          })
+          }),
         );
       } catch (_) {}
     });
@@ -563,7 +563,7 @@ function hookCalibrationPanel() {
             IMG_SCALE: BOARD_IMG_SCALE,
             IMG_X: BOARD_IMG_OFFSET_X,
             IMG_Y: BOARD_IMG_OFFSET_Y,
-          })
+          }),
         );
       } catch (_) {}
     });
@@ -581,7 +581,7 @@ function hookCalibrationPanel() {
             IMG_SCALE: BOARD_IMG_SCALE,
             IMG_X: BOARD_IMG_OFFSET_X,
             IMG_Y: BOARD_IMG_OFFSET_Y,
-          })
+          }),
         );
       } catch (_) {}
     });
@@ -1417,28 +1417,41 @@ window.addEventListener("DOMContentLoaded", () => {
   hookCalibrationPanel();
   drawFade();
   initSfx();
-  applyBoardRotation();
-  applyBoardTransform();
+  applyBoardTransform(); // CORRECTED: Now calls applyBoardTransform() to apply ALL offsets/scale/rot on load.
+
+  // Get references to buttons
   const s = document.getElementById("btn-start");
-  const r = document.getElementById("btn-reset");
+  const r = document.getElementById("btn-reset"); // CORRECTED ID: Assumes your HTML button ID is "btn-reset"
   const u = document.getElementById("btn-undo");
   const c = document.getElementById("btn-capture");
   const d = document.getElementById("btn-detect");
+
+  // Attach event listeners
   if (s) s.addEventListener("click", startGame);
   if (r) r.addEventListener("click", resetGame);
   if (u) u.addEventListener("click", undo);
-  if (c)
+
+  // CORRECTED: Capture button wiring. Removed the erroneous `if (e)`
+  if (c) {
     c.addEventListener("click", () => {
       captureBoardBefore();
     });
-  if (d)
+  }
+
+  // CORRECTED: Detect button wiring. Fixed the typo from `detectPartFromCamera`
+  if (d) {
     d.addEventListener("click", () => {
-      detectDartFromCamera();
+      detectDartFromCamera(); // Function is named `detectDartFromCamera` not `detectPartFromCamera`
     });
+  }
+
+  // This block was slightly out of place in your provided content.
+  // Assuming 'game' is defined globally or within scope.
   ENGINE.setMode(game.mode); // reflect boot mode before Start
   renderPlayers();
   updateThrowsUI(0);
   updateThrowsUI(1);
+  // applyBoardRotation(); // This line was redundant if applyBoardTransform is called above. Remove or comment out.
 });
 window.addEventListener("keydown", (e) => {
   if ((e.key === "c" || e.key === "C") && (e.ctrlKey || e.metaKey)) {

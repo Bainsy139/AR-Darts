@@ -458,8 +458,8 @@ def detect_impact(before_img, after_img):
     if WARP_MATRIX is None:
         M = _compute_warp_from_aruco(before_img)
         if M is None:
-            print("[WARP] No ArUco warp available and no manual fallback configured.")
-            return {"hit": None, "reason": "no_aruco_warp"}
+            print("[WARP] ArUco warp not available, falling back to DEFAULT_SRC_POINTS.")
+            M = cv2.getPerspectiveTransform(DEFAULT_SRC_POINTS, DST_POINTS) # <<< RE-ADDED FALLBACK
         WARP_MATRIX = M
     else:
         M = WARP_MATRIX
@@ -747,8 +747,8 @@ def estimate_tip(before_img, after_img, debug_img=None):
     # Compute warp matrix (possibly from ArUco)
     M = _compute_warp_from_aruco(before_img)
     if M is None:
-        print("[WARP] No ArUco warp available and no manual fallback configured.")
-        return None
+        print("[WARP] No ArUco warp available for estimate_tip, falling back to DEFAULT_SRC_POINTS.")
+        M = cv2.getPerspectiveTransform(DEFAULT_SRC_POINTS, DST_POINTS) # <<< RE-ADDED FALLBACK
     h, w = before_img.shape[:2]
     warped_before = cv2.warpPerspective(before_img, M, (w, h))
     warped_after = cv2.warpPerspective(after_img, M, (w, h))
