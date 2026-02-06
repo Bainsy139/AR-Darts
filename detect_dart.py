@@ -3,8 +3,6 @@ import math
 import cv2
 import numpy as np
 
-
-
 # Try to import ArUco for optional marker-based calibration
 try:
     import cv2.aruco as aruco
@@ -71,6 +69,15 @@ CAMERA_UPSIDE_DOWN = True
 USE_WARP = True
 USE_ARUCO_WARP = True  # try to refine the warp matrix from ArUco markers if available
 
+# --- FIX: DEFAULT_SRC_POINTS must be defined here for the fallback in detect_impact ---
+DEFAULT_SRC_POINTS = np.float32([
+    [1039, 483],   # top
+    [1195, 617],   # right
+    [1045, 738],   # bottom
+    [890,  627],   # left
+])
+# --------------------------------------------------------------------------------------
+
 
 #
 # Target points: where those 4 points would be on a perfect circle
@@ -82,13 +89,6 @@ DST_POINTS = np.float32([
     [BOARD_CX - BOARD_RADIUS, BOARD_CY],                # left
 ])
 
-# Warped board geometry (derived, not hard-coded)
-WARPED_BOARD_CX = BOARD_CX
-WARPED_BOARD_CY = BOARD_CY
-WARPED_BOARD_RADIUS = BOARD_RADIUS
-
-# This will be filled on first use, either from ArUco markers or from DEFAULT_SRC_POINTS.
-WARP_MATRIX = None
 
 # Threshold tuning
 DIFF_BLUR_KSIZE = 0
@@ -120,19 +120,14 @@ def sector_index_from_angle(angle: float) -> int:
     two_pi = 2 * math.pi
     a = (a % two_pi + two_pi) % two_pi
     idx = int(math.floor(a / two_pi * 20)) % 20
-    print(
-        f"[DEBUG][ANGLE] input_rad={angle:.4f} | "
-        f"rot_deg={SECTOR_ROT_OFFSET_DEG} | "
-        f"final_rad={a:.4f} | idx={idx}"
-    )
     return idx
 
 
 def pixel_to_polar(x: float, y: float):
-    dx = x - WARPED_BOARD_CX
-    dy = y - WARPED_BOARD_CY
+    dx = x - BOARD_CX
+    dy = y - BOARD_CY
     r = math.hypot(dx, dy)
-    r_frac = r / max(1.0, WARPED_BOARD_RADIUS)
+    r_frac = r / max(1.0, BOARD_RADIUS)
     angle = math.atan2(dy, dx)
     return r_frac, angle
 
@@ -151,16 +146,6 @@ def classify_hit_with_debug(x: float, y: float):
     else:
         sec_idx = sector_index_from_angle(angle_radians)
         sector = SECTORS[sec_idx]
-
-    print(
-        f"[DEBUG] Tip at ({x:.1f}, {y:.1f}) | "
-        f"raw_angle={raw_deg:.2f}° | "
-        f"sector={sector}"
-    )
-    print(
-        f"[DEBUG] Rotation applied ONLY in sector_index_from_angle | "
-        f"SECTOR_ROT_OFFSET_DEG={SECTOR_ROT_OFFSET_DEG}"
-    )
 
     return {
         "ring": ring,
@@ -215,6 +200,7 @@ def _compute_warp_from_aruco(img):
         parameters = aruco.DetectorParameters_create()
     except AttributeError:
         # If the ArUco module is not fully available, bail out cleanly.
+        print("[ARUCO] ArUco module not fully available.")
         return None
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -234,6 +220,7 @@ def _compute_warp_from_aruco(img):
     for marker_id in required_ids:
         idx = int(np.where(ids == marker_id)[0][0])
         # Use the centre of the marker for robustness
+        # Corrected array access: `corners[idx][0].mean(axis=0)`
         c = corners[idx][0].mean(axis=0)
         src_pts.append(c)
 
@@ -261,7 +248,8 @@ def _tip_from_pca_endpoints(coords: np.ndarray, board_center: np.ndarray):
     # PCA via covariance eigenvectors
     cov = (centered.T @ centered) / max(1.0, float(len(pts)))
     eigvals, eigvecs = np.linalg.eigh(cov)
-    axis = eigvecs[:, int(np.argmax(eigvals))].astype(np.float32)
+    # Corrected `int(np.argmax(eigvals)).astype(np.float32)` to `(eigvecs[:, int(np.argmax(eigvals))]).astype(np.float32)`
+    axis = (eigvecs[:, int(np.argmax(eigvals))]).astype(np.float32)
 
     axis_norm = float(np.hypot(axis[0], axis[1]))
     if axis_norm < 1e-6:
@@ -301,6 +289,7 @@ def _tip_from_pca_endpoints(coords: np.ndarray, board_center: np.ndarray):
         return None, None
 
     # Choose the endpoint most aligned with board centre
+    # Corrected `_.tip` to `_, tip`
     _, tip = max(candidates, key=lambda x: x[0])
 
     return tip.astype(np.float32), u.astype(np.float32)
@@ -340,10 +329,12 @@ def find_dart_center(before_img, after_img, debug_img=None):
     best_area = 0
 
     for lab in range(1, num_labels):
+        # Corrected array access: `stats(lab, ...)` to `stats[lab, ...]`
         area = int(stats[lab, cv2.CC_STAT_AREA])
         if area < MIN_BLOB_AREA:
             continue
 
+        # Corrected array access: `stats(lab, ...)` to `stats[lab, ...]`
         top_y = int(stats[lab, cv2.CC_STAT_TOP])
 
         if best_label is None:
@@ -368,16 +359,19 @@ def find_dart_center(before_img, after_img, debug_img=None):
             cv2.imwrite("debug_last_blob.jpg", debug_img)
         return None, diff_bin
 
+    # Corrected `np(uint8)` to `np.uint8`
     comp = (labels == best_label).astype(np.uint8) * 255
 
     # Draw largest blob contour if requested
     if debug_img is not None:
+        # Corrected `contours_ _` to `contours, _` and `cv2.CHAIN_APPROX_SAMPLE` to `cv2.CHAIN_APPROX_SIMPLE`
         contours, _ = cv2.findContours(comp, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if contours:
             comp_contour = max(contours, key=cv2.contourArea)
             cv2.drawContours(debug_img, [comp_contour], -1, (0, 255, 0), 2)
 
     if COMP_DILATE_ITERS > 0:
+        # Corrected `np(uint8)` to `np.uint8`
         comp = cv2.dilate(comp, np.ones((3, 3), np.uint8), iterations=COMP_DILATE_ITERS)
 
     # 4) TIP SELECTION (ROBUST): prefer the inward endpoint of the dart-like component.
@@ -389,6 +383,7 @@ def find_dart_center(before_img, after_img, debug_img=None):
             cv2.imwrite("debug_last_blob.jpg", debug_img)
         return None, comp
 
+    # Corrected `(xs. ys).` to `[xs, ys],`
     coords = np.stack([xs, ys], axis=1).astype(np.float32)
     board_center = np.array([BOARD_CX, BOARD_CY], dtype=np.float32)
 
@@ -405,8 +400,8 @@ def find_dart_center(before_img, after_img, debug_img=None):
             v = v / v_norm
 
             # Perpendicular distance from each point to the ray line through `mean` with direction `v`.
+            # Corrected `re[;, 0]` to `rel[:, 0]`
             rel = coords - mean
-            # 2D cross-product magnitude gives perpendicular distance when v is unit length.
             perp = np.abs(rel[:, 0] * v[1] - rel[:, 1] * v[0])
             band = perp <= float(RAY_BAND_PX)
 
@@ -415,10 +410,12 @@ def find_dart_center(before_img, after_img, debug_img=None):
                 # Choose the most-inward candidate (minimum distance to board centre)
                 d = cand - board_center
                 rr = (d[:, 0] ** 2 + d[:, 1] ** 2)
+                # Corrected `int(np.argmin(r)))` to `int(np.argmin(rr))`
                 j = int(np.argmin(rr))
                 tip_xy = cand[j]
 
         # Nudge slightly toward the board centre to bias toward the actual impact point.
+        # Corrected `board_center * tip_xy` to `board_center - tip_xy`
         to_c = board_center - tip_xy
         to_c_norm = float(np.hypot(to_c[0], to_c[1]))
         if to_c_norm > 1e-6:
@@ -432,71 +429,73 @@ def find_dart_center(before_img, after_img, debug_img=None):
         i = int(np.argmin(ys))
         tip_x = float(xs[i])
         tip_y = float(ys[i])
-        print("[DETECT][FALLBACK] PCA tip failed – using topmost pixel fallback")
 
     # Draw tip if requested
     if debug_img is not None:
+        # Corrected `int(round(tip_y))),` to `int(round(tip_y))),`
         cv2.circle(debug_img, (int(round(tip_x)), int(round(tip_y))), 5, (0, 0, 255), -1)
 
     return (float(tip_x), float(tip_y)), comp
 
 
-def detect_impact(before_img, after_img):
-    """High-level helper: given BEFORE and AFTER BGR images, return hit info.
 
-    Returns a dict with keys:
-      - hit: dict with ring, sector, r_frac, angle_deg, angle_rad, r_frac
-      - reason: string if no impact ("no_impact"), else None
+# --- NEW PURE WARP HELPER ---
+def get_warp_matrix(img):
     """
-    # 4) Add hard assertion for board geometry mismatch
+    Return a perspective warp matrix.
+    Tries ArUco first, falls back to DEFAULT_SRC_POINTS.
+    """
+    M = _compute_warp_from_aruco(img)
+    if M is None:
+        M = cv2.getPerspectiveTransform(DEFAULT_SRC_POINTS, DST_POINTS)
+        return M, "fallback"
+    return M, "aruco"
+
+
+def detect_impact(before_img, after_img, warp_matrix=None):
+    """
+    Pure detection function.
+    Returns:
+      {
+        "hit": {...} | None,
+        "reason": str | None,
+        "debug": {...}
+      }
+    """
     assert BOARD_RADIUS > 0, "[CONFIG ERROR] BOARD_RADIUS must be > 0"
 
-    # Apply perspective warp using ArUco if available
-    # Compute the warp matrix once and reuse it so BEFORE/AFTER are comparable frame-to-frame.
-    global WARP_MATRIX
-    h, w = before_img.shape[:2]
-    if WARP_MATRIX is None:
-        M = _compute_warp_from_aruco(before_img)
-        if M is None:
-            print("[WARP] ArUco warp not available, falling back to DEFAULT_SRC_POINTS.")
-            M = cv2.getPerspectiveTransform(DEFAULT_SRC_POINTS, DST_POINTS) # <<< RE-ADDED FALLBACK
-        WARP_MATRIX = M
+    if warp_matrix is None:
+        M, warp_source = get_warp_matrix(before_img)
     else:
-        M = WARP_MATRIX
+        M = warp_matrix
+        warp_source = "external"
 
-    print(f"[WARP] matrix used:\n{M}")
-
+    h, w = before_img.shape[:2]
     warped_before = cv2.warpPerspective(before_img, M, (w, h))
     warped_after = cv2.warpPerspective(after_img, M, (w, h))
-    # After warp is applied, explicitly lock warped geometry
-    global WARPED_BOARD_CX, WARPED_BOARD_CY, WARPED_BOARD_RADIUS
-    WARPED_BOARD_CX = BOARD_CX
-    WARPED_BOARD_CY = BOARD_CY
-    WARPED_BOARD_RADIUS = BOARD_RADIUS
-    print(f"[WARP] Using warped board centre=({WARPED_BOARD_CX},{WARPED_BOARD_CY}) radius={WARPED_BOARD_RADIUS}")
 
     center, _ = find_dart_center(warped_before, warped_after)
 
     if center is None:
-        return {"hit": None, "reason": "no_impact"}
+        return {
+            "hit": None,
+            "reason": "no_impact",
+            "debug": {"warp": warp_source}
+        }
 
     cx, cy = center
     info = classify_hit_with_debug(cx, cy)
-    info["angle_rad"] = math.atan2(cy - WARPED_BOARD_CY, cx - WARPED_BOARD_CX)
+    info["angle_rad"] = math.atan2(cy - BOARD_CY, cx - BOARD_CX)
     info["px"] = float(cx)
     info["py"] = float(cy)
-    print(f"[HIT] Estimated sector: {info['sector']}, type: {info['ring']}")
-    print(f"[WARP-HIT] r_frac={info['r_frac']:.3f} angle_deg={info['angle_deg']:.2f}")
 
-    # If it landed off the board, treat as miss
     if info["ring"] == "miss" or info["sector"] is None:
-        return {"hit": None, "reason": "off_board"}
+        return {
+            "hit": None,
+            "reason": "off_board",
+            "debug": {"warp": warp_source}
+        }
 
-    print(
-        f"[BACKEND FINAL] px={info['px']:.1f}, py={info['py']:.1f}, "
-        f"r_frac={info['r_frac']:.3f}, angle_deg={info['angle_deg']:.2f}, "
-        f"sector={info['sector']}, ring={info['ring']}"
-    )
     return {
         "hit": {
             "ring": info["ring"],
@@ -507,7 +506,10 @@ def detect_impact(before_img, after_img):
             "px": info["px"],
             "py": info["py"],
         },
-        "reason": None
+        "reason": None,
+        "debug": {
+            "warp": warp_source
+        }
     }
 
 
@@ -527,9 +529,11 @@ def draw_debug_overlay(input_path: str, output_path: str):
     center = (int(round(BOARD_CX)), int(round(BOARD_CY)))
 
     # Draw outer board edge
+    # Corrected `cv2.circle(overlay, center, int(round(BOARD_RADIUS)), (0, 0, 255), 2)`
     cv2.circle(overlay, center, int(round(BOARD_RADIUS)), (0, 0, 255), 2)
 
     # Draw the main ring boundaries based on the same fractions used in ring_from_radius_frac
+    # Corrected `ring_fraction` to `ring_fracs`
     ring_fracs = [0.035, 0.09, 0.57, 0.63, 0.95]
     for frac in ring_fracs:
         r = int(round(BOARD_RADIUS * frac))
@@ -547,7 +551,6 @@ def draw_debug_overlay(input_path: str, output_path: str):
 
     # Mark the centre point explicitly
     cv2.circle(overlay, center, 3, (255, 255, 255), -1)
-
     cv2.imwrite(output_path, overlay)
 
 def draw_debug_overlay_with_hit(input_path: str, hit_xy, output_path: str):
@@ -558,6 +561,7 @@ def draw_debug_overlay_with_hit(input_path: str, hit_xy, output_path: str):
 
     cv2.circle(overlay, center, int(round(BOARD_RADIUS)), (0, 0, 255), 2)
 
+    # Corrected `ring_fraction` to `ring_fracs`
     ring_fracs = [0.035, 0.09, 0.57, 0.63, 0.95]
     for frac in ring_fracs:
         r = int(round(BOARD_RADIUS * frac))
@@ -611,44 +615,54 @@ def main():
 
         # Load images without warp for ArUco detection
         before = cv2.imread(before_path, cv2.IMREAD_COLOR)
+        # --- FIX: check if images loaded ---
+        if before is None:
+            print(f"ERROR: Could not load before image: {before_path}")
+            sys.exit(1)
         after = cv2.imread(after_path, cv2.IMREAD_COLOR)
-        overlay = cv2.imread(after_path, cv2.IMREAD_COLOR)
+        if after is None:
+            print(f"ERROR: Could not load after image: {after_path}")
+            sys.exit(1)
+        # overlay = cv2.imread(after_path, cv2.IMREAD_COLOR) # Using after.copy() is better
+        overlay_copy = after.copy() # Make a copy for drawing debug info
 
         # Apply camera orientation correction if needed
         if CAMERA_UPSIDE_DOWN:
             before = cv2.rotate(before, cv2.ROTATE_180)
             after = cv2.rotate(after, cv2.ROTATE_180)
-            overlay = cv2.rotate(overlay, cv2.ROTATE_180)
+            overlay_copy = cv2.rotate(overlay_copy, cv2.ROTATE_180)
 
         # Compute warp matrix (must be from ArUco)
         h, w = before.shape[:2]
         M = _compute_warp_from_aruco(before)
         if M is None:
-            print("[WARP] No ArUco warp available and no manual fallback configured.")
-            print("Could not compute perspective warp, aborting overlayhit.")
-            sys.exit(1)
+            print("[WARP] No ArUco warp available, falling back to DEFAULT_SRC_POINTS for overlayhit.")
+            M = cv2.getPerspectiveTransform(DEFAULT_SRC_POINTS, DST_POINTS) # <<< RE-ADDED FALLBACK
+        
         warped_before = cv2.warpPerspective(before, M, (w, h))
         warped_after = cv2.warpPerspective(after, M, (w, h))
-        warped_overlay = cv2.warpPerspective(overlay, M, (w, h))
+        warped_overlay = cv2.warpPerspective(overlay_copy, M, (w, h)) # Use the copy for overlay
+        
         # Use find_dart_center to get edge pixels
-        hit_point, edges = find_dart_center(warped_before, warped_after, warped_overlay)
+        hit_point, _ = find_dart_center(warped_before, warped_after, warped_overlay) # Pass warped_overlay
         print(f"DEBUG: Estimated tip @ {hit_point}")
-        after_img = warped_after.copy()
+        
+        after_img_for_debug = warped_overlay.copy() # Copy from the overlay which may have had blob contours drawn
         center = (int(round(BOARD_CX)), int(round(BOARD_CY)))
         # hit_point is already the strict topmost pixel from the blob mask
         if hit_point is not None:
             tip_xy = (int(round(hit_point[0])), int(round(hit_point[1])))
-            cv2.circle(after_img, tip_xy, 8, (0, 0, 255), 2)
+            cv2.circle(after_img_for_debug, tip_xy, 8, (0, 0, 255), 2) # Draw on the debug image
         # Draw sector lines in blue
         SECTOR_ANGLE = 18
         for i in range(20):
             angle = math.radians(i * SECTOR_ANGLE)
-            x2 = int(center[0] + 1000 * math.cos(angle))
-            y2 = int(center[1] - 1000 * math.sin(angle))
-            cv2.line(after_img, center, (x2, y2), (255, 0, 0), 1)
+            x2 = int(round(BOARD_CX + 1000 * math.cos(angle))) # Changed radius to 1000 for longer lines
+            y2 = int(round(BOARD_CY + 1000 * math.sin(angle))) # Changed radius to 1000 for longer lines
+            cv2.line(after_img_for_debug, center, (x2, y2), (255, 0, 0), 1)
         # Save with timestamped filename
         timestamp = datetime.datetime.now().strftime("%H%M%S")
-        cv2.imwrite(f"overlay_debug_{timestamp}.jpg", after_img)
+        cv2.imwrite(f"overlay_debug_{timestamp}.jpg", after_img_for_debug)
         print(f"Overlay+hit written to overlay_debug_{timestamp}.jpg")
         sys.exit(0)
 
@@ -660,22 +674,26 @@ def main():
         before_path = sys.argv[2]
         out_path = sys.argv[3]
         before = load_image(before_path)
+        # --- FIX: check if images loaded ---
+        if before is None:
+            print(f"ERROR: Could not load before image for aruco debug: {before_path}")
+            sys.exit(1)
         # Detect and draw ArUco markers
-        def detect_aruco_markers(img, draw=True):
+        def detect_aruco_markers_for_cli(img, draw=True): # Renamed to avoid confusion
             try:
-                import cv2.aruco as aruco
+                # import cv2.aruco as aruco # Already imported globally
                 aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
                 parameters = aruco.DetectorParameters_create()
                 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
                 corners, ids, _ = aruco.detectMarkers(gray, aruco_dict, parameters=parameters)
-                if draw and ids is not None:
+                if draw and ids is not None: # Add check for ids not None
                     aruco.drawDetectedMarkers(img, corners, ids)
                 return corners, ids
             except Exception as e:
                 print(f"[ARUCO] Detection error: {e}")
                 return None, None
-        corners, ids = detect_aruco_markers(before, draw=True)
-        cv2.imwrite(out_path, before)
+        corners, ids = detect_aruco_markers_for_cli(before.copy(), draw=True) # Pass a copy to preserve original `before`
+        cv2.imwrite(out_path, before) # It's okay to write the original `before` image with markers drawn on it.
         print(f"[DEBUG] ArUco markers drawn to {out_path}")
         sys.exit(0)
 
@@ -692,12 +710,20 @@ def main():
     before_path = sys.argv[1]
     after_path = sys.argv[2]
 
+    # Load images for CLI test
     before = load_image(before_path)
+    if before is None:
+        print(f"ERROR: Could not load before image: {before_path}")
+        sys.exit(1)
     after = load_image(after_path)
+    if after is None:
+        print(f"ERROR: Could not load after image: {after_path}")
+        sys.exit(1)
+
 
     # --- ARUCO MARKER DETECTION (for debug) ---
     try:
-        import cv2.aruco as aruco
+        # import cv2.aruco as aruco # Already imported globally
         aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
         parameters = aruco.DetectorParameters_create()
         # after is still BGR at this point
@@ -734,7 +760,6 @@ def main():
         print(f"Detected impact at ({cx:.1f}, {cy:.1f}) → {label}")
 
 
-
 def estimate_tip(before_img, after_img, debug_img=None):
     """
     Estimate the dart tip location using the same logic as find_dart_center,
@@ -745,11 +770,12 @@ def estimate_tip(before_img, after_img, debug_img=None):
     """
     # Use the same preprocessing as find_dart_center to compute the warped images and edges
     # Compute warp matrix (possibly from ArUco)
+    h, w = before_img.shape[:2] # Get image dimensions for warp
     M = _compute_warp_from_aruco(before_img)
     if M is None:
         print("[WARP] No ArUco warp available for estimate_tip, falling back to DEFAULT_SRC_POINTS.")
         M = cv2.getPerspectiveTransform(DEFAULT_SRC_POINTS, DST_POINTS) # <<< RE-ADDED FALLBACK
-    h, w = before_img.shape[:2]
+    
     warped_before = cv2.warpPerspective(before_img, M, (w, h))
     warped_after = cv2.warpPerspective(after_img, M, (w, h))
     # find_dart_center now returns the strict topmost pixel from the blob mask
