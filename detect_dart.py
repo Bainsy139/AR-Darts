@@ -487,6 +487,10 @@ def draw_debug_overlay_with_hit(input_path: str, hit_xy, output_path: str):
         r = int(round(BOARD_RADIUS * frac))
         cv2.circle(overlay, center, r, (0, 255, 0), 1)
 
+    # Emphasize bull rings
+    cv2.circle(overlay, center, int(round(BOARD_RADIUS * 0.035)), (0, 255, 255), 2)  # inner bull
+    cv2.circle(overlay, center, int(round(BOARD_RADIUS * 0.09)), (0, 128, 255), 1)   # outer bull
+
     rot_rad = math.radians(ROT_OFFSET_DEG)
     two_pi = 2.0 * math.pi
     for k in range(20):
@@ -494,6 +498,14 @@ def draw_debug_overlay_with_hit(input_path: str, hit_xy, output_path: str):
         x2 = int(round(BOARD_CX + BOARD_RADIUS * math.cos(angle)))
         y2 = int(round(BOARD_CY + BOARD_RADIUS * math.sin(angle)))
         cv2.line(overlay, center, (x2, y2), (255, 0, 0), 1)
+        # Draw sector labels just outside the board
+        label_radius = int(round(BOARD_RADIUS * 1.05))
+        text_pos = (
+            int(round(BOARD_CX + label_radius * math.cos(angle))),
+            int(round(BOARD_CY + label_radius * math.sin(angle)))
+        )
+        label = str(SECTORS[k])
+        cv2.putText(overlay, label, text_pos, cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1, cv2.LINE_AA)
 
     cv2.circle(overlay, center, 3, (255, 255, 255), -1)
 

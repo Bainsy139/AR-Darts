@@ -36,6 +36,9 @@ function saveCal() {
         CY: CENTER_Y_FUDGE,
         ROT: ROT_OFFSET_DEG,
         IMG_ROT: BOARD_IMG_ROT_DEG,
+        IMG_SCALE: BOARD_IMG_SCALE,
+        IMG_X: BOARD_IMG_X,
+        IMG_Y: BOARD_IMG_Y,
       }),
     );
   } catch (_) {}
@@ -138,8 +141,11 @@ let CENTER_Y_FUDGE = 0;
 // Sector math / hit detection rotation
 let ROT_OFFSET_DEG = 2;
 
-// Visual-only board image rotation
+// Visual-only board image transform
 let BOARD_IMG_ROT_DEG = 0;
+let BOARD_IMG_SCALE = 1.0;
+let BOARD_IMG_X = 0;
+let BOARD_IMG_Y = 0;
 // Initial visibility of guides / panel from storage
 let SHOW_CAL_PANEL = loadCalUi();
 // Apply any saved calibration
@@ -150,6 +156,9 @@ let SHOW_CAL_PANEL = loadCalUi();
   if (typeof s.CY === "number") CENTER_Y_FUDGE = s.CY;
   if (typeof s.ROT === "number") ROT_OFFSET_DEG = s.ROT;
   if (typeof s.IMG_ROT === "number") BOARD_IMG_ROT_DEG = s.IMG_ROT;
+  if (typeof s.IMG_SCALE === "number") BOARD_IMG_SCALE = s.IMG_SCALE;
+  if (typeof s.IMG_X === "number") BOARD_IMG_X = s.IMG_X;
+  if (typeof s.IMG_Y === "number") BOARD_IMG_Y = s.IMG_Y;
 })();
 
 // --- Visual guides toggle & ring ratios ---
@@ -170,10 +179,13 @@ const statusEl = document.getElementById("status");
 // ---------------------------------------------------------
 // Board image rotation (now decoupled from ROT_OFFSET_DEG)
 // ---------------------------------------------------------
-function applyBoardRotation() {
+function applyBoardImageTransform() {
   if (!board) return;
   board.style.transformOrigin = "50% 50%";
-  board.style.transform = `rotate(${BOARD_IMG_ROT_DEG}deg)`;
+  board.style.transform =
+    `translate(${BOARD_IMG_X}px, ${BOARD_IMG_Y}px) ` +
+    `scale(${BOARD_IMG_SCALE}) ` +
+    `rotate(${BOARD_IMG_ROT_DEG}deg)`;
 }
 
 const ctx = overlay.getContext("2d");
@@ -508,35 +520,34 @@ function hookCalibrationPanel() {
   if (rot) rot.value = ROT_OFFSET_DEG;
   if (imgRot) imgRot.value = BOARD_IMG_ROT_DEG;
   if (tog) tog.checked = SHOW_GUIDES;
-  // --- Numeric calibration input initial value sync ---
-  if (imgScale) imgScale.value = BOARD_RADIUS_FUDGE.toFixed(3);
-  if (imgX) imgX.value = CENTER_X_FUDGE;
-  if (imgY) imgY.value = CENTER_Y_FUDGE;
+  // --- Image calibration input initial value sync ---
+  if (imgScale) imgScale.value = BOARD_IMG_SCALE.toFixed(3);
+  if (imgX) imgX.value = BOARD_IMG_X;
+  if (imgY) imgY.value = BOARD_IMG_Y;
   if (panel && panel.classList.contains("hidden")) {
     // no-op
   }
   sync();
   if (rx) {
     rx.addEventListener("input", () => {
-      BOARD_RADIUS_FUDGE = parseFloat(rx.value);
+      BOARD_RADIUS_FUDGE = parseFloat(rx.value) || BOARD_RADIUS_FUDGE;
       drawFade();
-      sync();
       saveCal();
     });
   }
+
   if (dx) {
     dx.addEventListener("input", () => {
-      CENTER_X_FUDGE = parseInt(dx.value || "0");
+      CENTER_X_FUDGE = parseInt(dx.value || "0", 10);
       drawFade();
-      sync();
       saveCal();
     });
   }
+
   if (dy) {
     dy.addEventListener("input", () => {
-      CENTER_Y_FUDGE = parseInt(dy.value || "0");
+      CENTER_Y_FUDGE = parseInt(dy.value || "0", 10);
       drawFade();
-      sync();
       saveCal();
     });
   }
@@ -551,33 +562,30 @@ function hookCalibrationPanel() {
   if (imgRot) {
     imgRot.addEventListener("input", () => {
       BOARD_IMG_ROT_DEG = parseFloat(imgRot.value) || 0;
-      applyBoardRotation();
+      applyBoardImageTransform();
       sync();
       saveCal();
     });
   }
-  // --- Numeric calibration input listeners ---
+  // --- Image calibration input listeners ---
   if (imgScale) {
     imgScale.addEventListener("input", () => {
-      BOARD_RADIUS_FUDGE = parseFloat(imgScale.value) || BOARD_RADIUS_FUDGE;
-      drawFade();
-      sync();
+      BOARD_IMG_SCALE = parseFloat(imgScale.value) || BOARD_IMG_SCALE;
+      applyBoardImageTransform();
       saveCal();
     });
   }
   if (imgX) {
     imgX.addEventListener("input", () => {
-      CENTER_X_FUDGE = parseInt(imgX.value || "0");
-      drawFade();
-      sync();
+      BOARD_IMG_X = parseInt(imgX.value || "0");
+      applyBoardImageTransform();
       saveCal();
     });
   }
   if (imgY) {
     imgY.addEventListener("input", () => {
-      CENTER_Y_FUDGE = parseInt(imgY.value || "0");
-      drawFade();
-      sync();
+      BOARD_IMG_Y = parseInt(imgY.value || "0");
+      applyBoardImageTransform();
       saveCal();
     });
   }
@@ -1190,7 +1198,7 @@ function resetGame() {
   renderPlayers();
   updateThrowsUI(0);
   updateThrowsUI(1);
-  applyBoardRotation();
+  applyBoardImageTransform();
 }
 function startGame() {
   game.mode = BOOT_MODE;
@@ -1211,7 +1219,7 @@ function startGame() {
   renderPlayers();
   updateThrowsUI(0);
   updateThrowsUI(1);
-  applyBoardRotation();
+  applyBoardImageTransform();
 }
 function nextPlayer() {
   ENGINE.nextPlayer();
@@ -1328,7 +1336,7 @@ window.addEventListener("keydown", (e) => {
       break;
   }
   if (changed) {
-    applyBoardRotation();
+    applyBoardImageTransform();
     drawFade();
     statusEl.textContent = `Cal: R=${BOARD_RADIUS_FUDGE.toFixed(
       3,
@@ -1345,7 +1353,7 @@ window.addEventListener("DOMContentLoaded", () => {
   hookCalibrationPanel();
   drawFade();
   initSfx();
-  applyBoardRotation();
+  applyBoardImageTransform();
   const s = document.getElementById("btn-start");
   const r = document.getElementById("btn-reset");
   const u = document.getElementById("btn-undo");
