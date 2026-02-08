@@ -565,6 +565,16 @@ def main():
             warped_before = cv2.warpPerspective(before, M, (w, h))
             warped_after = cv2.warpPerspective(after, M, (w, h))
             warped_overlay = cv2.warpPerspective(overlay, M, (w, h))
+            # Draw ArUco markers on the warped image for debug
+            try:
+                aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
+                parameters = aruco.DetectorParameters_create()
+                gray_warped = cv2.cvtColor(warped_overlay, cv2.COLOR_BGR2GRAY)
+                corners, ids, _ = aruco.detectMarkers(gray_warped, aruco_dict, parameters=parameters)
+                if ids is not None:
+                    aruco.drawDetectedMarkers(warped_overlay, corners, ids)
+            except Exception:
+                pass
             # Use find_dart_center to get edge pixels
             hit_point, edges = find_dart_center(warped_before, warped_after, warped_overlay)
             print(f"DEBUG: Estimated tip @ {hit_point}")
