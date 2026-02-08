@@ -18,7 +18,7 @@ except ImportError:
 
 # Board centre (pixels) and radius in the captured image
 # Calibrated from overlay_debug on 1920x1080 frames
-BOARD_CX = 1042   # horizontal centre of board
+BOARD_CX = 930   # horizontal centre of board
 BOARD_CY = 625    # vertical centre of board
 BOARD_RADIUS = 130  # pixels from centre to outer double ring edge (tweak if overlay drifts)
 
