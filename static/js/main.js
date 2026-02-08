@@ -36,7 +36,7 @@ function saveCal() {
         CY: CENTER_Y_FUDGE,
         ROT: ROT_OFFSET_DEG,
         IMG_ROT: BOARD_IMG_ROT_DEG,
-      })
+      }),
     );
   } catch (_) {}
 }
@@ -269,7 +269,7 @@ function updateLastHitUI(playerIndex, label) {
 // Updates the player card target immediately after a hit.
 function updateTargetUI(playerIndex) {
   const el = document.getElementById(
-    playerIndex === 0 ? "p1-target" : "p2-target"
+    playerIndex === 0 ? "p1-target" : "p2-target",
   );
   if (!el) return;
 
@@ -287,7 +287,7 @@ function updateTargetUI(playerIndex) {
 // Renders: 🎯 (not yet thrown), ✅ (hit), ❌ (miss)
 function updateThrowsUI(playerIndex) {
   const el = document.getElementById(
-    playerIndex === 0 ? "p1-throws" : "p2-throws"
+    playerIndex === 0 ? "p1-throws" : "p2-throws",
   );
   if (!el) return;
 
@@ -320,7 +320,7 @@ function drawFade() {
     Math.max(1, radius * 0.2),
     cx - rect.left,
     cy - rect.top,
-    Math.max(overlay.width, overlay.height) * 0.6
+    Math.max(overlay.width, overlay.height) * 0.6,
   );
   g.addColorStop(0, "rgba(0,0,0,0.0)");
   g.addColorStop(1, "rgba(0,0,0,0.10)");
@@ -428,7 +428,7 @@ function drawATWTargetHighlight(cxLocal, cyLocal, radius) {
       rInner,
       cxLocal,
       cyLocal,
-      rOuter
+      rOuter,
     );
     g.addColorStop(0, "rgba(0,255,200,0.25)");
     g.addColorStop(1, "rgba(0, 255, 200, 1)");
@@ -476,7 +476,11 @@ function hookCalibrationPanel() {
   const imgRotVal = document.getElementById("cal-img-rot-val");
   const panel = document.getElementById("cal-panel");
   const btnCal = document.getElementById("btn-cal");
-  if (!rx || !dx || !dy || !rot || !tog) return; // panel not present
+  // --- Numeric calibration input lookups ---
+  const imgScale = document.getElementById("cal-img-scale");
+  const imgX = document.getElementById("cal-img-x");
+  const imgY = document.getElementById("cal-img-y");
+  if (!panel || !btnCal) return; // require panel + button only
   if (panel) {
     panel.classList.toggle("hidden", !SHOW_CAL_PANEL);
   }
@@ -498,40 +502,52 @@ function hookCalibrationPanel() {
     if (rotVal) rotVal.textContent = ROT_OFFSET_DEG.toFixed(1);
     if (imgRotVal) imgRotVal.textContent = BOARD_IMG_ROT_DEG.toFixed(1);
   };
-  rx.value = BOARD_RADIUS_FUDGE.toFixed(3);
-  dx.value = CENTER_X_FUDGE;
-  dy.value = CENTER_Y_FUDGE;
-  rot.value = ROT_OFFSET_DEG;
+  if (rx) rx.value = BOARD_RADIUS_FUDGE.toFixed(3);
+  if (dx) dx.value = CENTER_X_FUDGE;
+  if (dy) dy.value = CENTER_Y_FUDGE;
+  if (rot) rot.value = ROT_OFFSET_DEG;
   if (imgRot) imgRot.value = BOARD_IMG_ROT_DEG;
-  tog.checked = SHOW_GUIDES;
+  if (tog) tog.checked = SHOW_GUIDES;
+  // --- Numeric calibration input initial value sync ---
+  if (imgScale) imgScale.value = BOARD_RADIUS_FUDGE.toFixed(3);
+  if (imgX) imgX.value = CENTER_X_FUDGE;
+  if (imgY) imgY.value = CENTER_Y_FUDGE;
   if (panel && panel.classList.contains("hidden")) {
     // no-op
   }
   sync();
-  rx.addEventListener("input", () => {
-    BOARD_RADIUS_FUDGE = parseFloat(rx.value);
-    drawFade();
-    sync();
-    saveCal();
-  });
-  dx.addEventListener("input", () => {
-    CENTER_X_FUDGE = parseInt(dx.value || "0");
-    drawFade();
-    sync();
-    saveCal();
-  });
-  dy.addEventListener("input", () => {
-    CENTER_Y_FUDGE = parseInt(dy.value || "0");
-    drawFade();
-    sync();
-    saveCal();
-  });
-  rot.addEventListener("input", () => {
-    ROT_OFFSET_DEG = parseFloat(rot.value) || 0;
-    drawFade(); // keep overlay + highlights aligned
-    sync();
-    saveCal();
-  });
+  if (rx) {
+    rx.addEventListener("input", () => {
+      BOARD_RADIUS_FUDGE = parseFloat(rx.value);
+      drawFade();
+      sync();
+      saveCal();
+    });
+  }
+  if (dx) {
+    dx.addEventListener("input", () => {
+      CENTER_X_FUDGE = parseInt(dx.value || "0");
+      drawFade();
+      sync();
+      saveCal();
+    });
+  }
+  if (dy) {
+    dy.addEventListener("input", () => {
+      CENTER_Y_FUDGE = parseInt(dy.value || "0");
+      drawFade();
+      sync();
+      saveCal();
+    });
+  }
+  if (rot) {
+    rot.addEventListener("input", () => {
+      ROT_OFFSET_DEG = parseFloat(rot.value) || 0;
+      drawFade(); // keep overlay + highlights aligned
+      sync();
+      saveCal();
+    });
+  }
   if (imgRot) {
     imgRot.addEventListener("input", () => {
       BOARD_IMG_ROT_DEG = parseFloat(imgRot.value) || 0;
@@ -540,11 +556,38 @@ function hookCalibrationPanel() {
       saveCal();
     });
   }
-  tog.addEventListener("change", () => {
-    SHOW_GUIDES = !!tog.checked;
-    drawFade();
-    saveCal();
-  });
+  // --- Numeric calibration input listeners ---
+  if (imgScale) {
+    imgScale.addEventListener("input", () => {
+      BOARD_RADIUS_FUDGE = parseFloat(imgScale.value) || BOARD_RADIUS_FUDGE;
+      drawFade();
+      sync();
+      saveCal();
+    });
+  }
+  if (imgX) {
+    imgX.addEventListener("input", () => {
+      CENTER_X_FUDGE = parseInt(imgX.value || "0");
+      drawFade();
+      sync();
+      saveCal();
+    });
+  }
+  if (imgY) {
+    imgY.addEventListener("input", () => {
+      CENTER_Y_FUDGE = parseInt(imgY.value || "0");
+      drawFade();
+      sync();
+      saveCal();
+    });
+  }
+  if (tog) {
+    tog.addEventListener("change", () => {
+      SHOW_GUIDES = !!tog.checked;
+      drawFade();
+      saveCal();
+    });
+  }
 }
 
 async function logToServer(payload) {
@@ -1213,7 +1256,7 @@ function handleClick(e) {
   drawMarker(
     x,
     y,
-    ring.includes("bull") ? ring.replace("_", " ") : `${ring} ${sectorNum}`
+    ring.includes("bull") ? ring.replace("_", " ") : `${ring} ${sectorNum}`,
   );
 
   // Human‑readable label for this dart
@@ -1288,9 +1331,9 @@ window.addEventListener("keydown", (e) => {
     applyBoardRotation();
     drawFade();
     statusEl.textContent = `Cal: R=${BOARD_RADIUS_FUDGE.toFixed(
-      3
+      3,
     )}  dx=${CENTER_X_FUDGE}  dy=${CENTER_Y_FUDGE}  rot=${ROT_OFFSET_DEG.toFixed(
-      1
+      1,
     )}°`;
     saveCal();
   }
