@@ -1,5 +1,5 @@
 body {
-  background-color: #111;
+  background-color: #000000;
   color: white;
   text-align: center;
   margin: 0;
@@ -29,8 +29,9 @@ body {
   position: relative;
   width: var(--stage-w);
   height: var(--stage-h);
-  background: #222;
-  border: 2px solid #444;
+  /* this is the container background colour */
+  background: #ffffff;
+  border: 5px solid #1fd2ff;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -39,10 +40,11 @@ body {
 }
 
 #dartboard {
-  width: 30%;
+  width: 31.4%;
   height: auto;
   user-select: none;
   pointer-events: none; /* clicks go to overlay */
+  opacity: 1.51;
 }
 
 #overlay {
@@ -153,7 +155,7 @@ body {
   overflow: auto;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
     "Liberation Mono", "Courier New", monospace;
-  background: #111;
+  background: #ff0cdb;
   border: 1px dashed #333;
   border-radius: 6px;
   padding: 6px 8px;
@@ -203,23 +205,20 @@ input[type="range"] {
   right: 0;
 }
 
-/* Neon glass card */
+/* Player card */
 .hud-side .card {
-  width: 95%;
+  width: 80%;
   padding: 12px 14px;
   border-radius: 12px;
-  background: linear-gradient(
-    180deg,
-    rgba(10, 12, 18, 0.6),
-    rgba(10, 12, 18, 0.38)
-  );
-  border: 1px solid rgba(0, 255, 255, 0.22);
-  box-shadow: 0 0 24px rgba(0, 255, 255, 0.12) inset,
-    0 6px 18px rgba(0, 0, 0, 0.35);
+  /* player card colours here */
+  background: linear-gradient(#ff4df9, #00aaff);
+  border: 2px solid rgba(8, 214, 255, 1);
+  box-shadow: 0 0 24px rgb(8, 214, 255) inset, 0 6px 18px rgb(255, 255, 255);
   backdrop-filter: blur(2.5px);
   -webkit-backdrop-filter: blur(2.5px);
-  color: #dff8ff;
-  text-shadow: 0 0 6px rgba(0, 255, 255, 0.25);
+  /* this is the text colour */
+  color: #ffffff;
+  text-shadow: 0 0 1px rgb(255, 255, 255);
   pointer-events: none;
 }
 
@@ -339,19 +338,19 @@ input[type="range"] {
 /* Subtle emphasis on active text */
 .hud-side .card.active .p-name {
   color: #ffffff;
-  text-shadow: 0 0 10px rgba(0, 255, 200, 0.35);
+  text-shadow: 0 0 10px rgba(0, 255, 200, 1);
 }
 .hud-side .card.inactive .p-name {
   color: #b7d6db;
 }
 .hud-side .card.inactive .p-line {
-  opacity: 0.6;
+  opacity: 1;
 }
 
 /* TEMP: de-emphasize Throws line; will remove later */
 #p1-throws,
 #p2-throws {
-  opacity: 0.55;
+  opacity: 1;
 }
 
 /* ===== Turn badge (top-center) ===== */

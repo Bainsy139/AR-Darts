@@ -1,17 +1,28 @@
 from flask import Flask, render_template, request, jsonify
+import subprocess
+import os
+import shutil
+import detect_dart  # uses your existing detection logic
 
 app = Flask(__name__)
+
+# Paths for before/after images used by detection
+BEFORE_PATH = "before.jpg"
+AFTER_PATH = "after.jpg"
+
 
 @app.route('/')
 def index():
     return render_template('index.html')
+
 
 @app.post('/hit')
 def hit():
     data = request.get_json(force=True)
     print("HIT:", data)  # shows in your terminal
     return jsonify({"ok": True})
-    
+
+
 @app.route('/home')
 def home():
     return render_template('home.html')
@@ -23,8 +34,139 @@ def play(game):
     if game not in ('around', 'x01'):
         game = 'around'
     start = int(request.args.get('start', 501))
-    double_out = request.args.get('double_out', '1') == '1'
+    # Support both legacy double_out=1 and newer doubleOut=true
+    if 'doubleOut' in request.args:
+        double_out = request.args.get('doubleOut', 'true').lower() == 'true'
+    else:
+        double_out = request.args.get('double_out', '1') == '1'
     return render_template('play.html', game=game, start=start, double_out=double_out)
 
+
+# --- New endpoints for camera + detection --- #
+
+@app.post('/capture-before')
+def capture_before():
+    """
+    Capture a BEFORE frame (no dart) and save to BEFORE_PATH.
+    Front-end flow:
+      1) Call /capture-before
+      2) User throws dart
+      3) Call /detect
+    """
+    try:
+        cmd = [
+            "rpicam-still",
+            "-o", BEFORE_PATH,
+            "-t", "1000",
+            "--width", "1920",
+            "--height", "1080",
+        ]
+        subprocess.run(cmd, check=True)
+        return jsonify({"ok": True})
+    except subprocess.CalledProcessError as e:
+        print("ERROR capturing BEFORE image:", e)
+        return jsonify({"ok": False, "error": "capture_before_failed"}), 500
+
+
+@app.post('/detect')
+def detect():
+    """Capture an AFTER frame, compare against a rolling baseline, and return hit JSON.
+
+    Behaviour:
+      - If BEFORE_PATH (baseline) does not exist yet, capture a warm-up frame
+        and return a no_impact response. This establishes the baseline.
+      - On subsequent calls, use BEFORE_PATH as the baseline, capture AFTER_PATH
+        as the new frame, and run detect_dart.detect_impact(before, after).
+      - When a valid hit is found, update BEFORE_PATH to the latest AFTER_PATH
+        so multiple darts can accumulate on the board.
+    """
+    # 0) Ensure we have a baseline; if not, capture one and return a warm-up response.
+    if not os.path.exists(BEFORE_PATH):
+        try:
+            cmd = [
+                "rpicam-still",
+                "-o", BEFORE_PATH,
+                "-t", "1000",
+                "--width", "1920",
+                "--height", "1080",
+            ]
+            subprocess.run(cmd, check=True)
+            print("[DETECT] Baseline captured (warm-up).")
+            return jsonify({"ok": True, "hit": None, "reason": "baseline_captured"})
+        except subprocess.CalledProcessError as e:
+            print("ERROR capturing baseline image:", e)
+            return jsonify({"ok": False, "error": "baseline_capture_failed"}), 500
+
+    # 1) Capture AFTER image
+    try:
+        cmd = [
+            "rpicam-still",
+            "-o", AFTER_PATH,
+            "-t", "1000",
+            "--width", "1920",
+            "--height", "1080",
+        ]
+        subprocess.run(cmd, check=True)
+    except subprocess.CalledProcessError as e:
+        print("ERROR capturing AFTER image:", e)
+        return jsonify({"ok": False, "error": "capture_after_failed"}), 500
+
+    # 2) Load images and run high-level detection
+    try:
+        before = detect_dart.load_image(BEFORE_PATH)
+        after = detect_dart.load_image(AFTER_PATH)
+    except Exception as e:
+        print("ERROR loading images:", e)
+        return jsonify({"ok": False, "error": "load_failed"}), 500
+
+    result = detect_dart.detect_impact(before, after)
+    # Save debug overlay with hit circle
+    hit_info = result.get("hit")
+    if hit_info and 'x' in hit_info and 'y' in hit_info:
+        debug_overlay = after.copy()
+        import cv2
+        cv2.circle(debug_overlay, (int(hit_info['x']), int(hit_info['y'])), 10, (0, 0, 255), 2)
+        cv2.imwrite("last_overlay_debug.jpg", debug_overlay)
+
+    reason = result.get("reason")
+
+    if not hit_info:
+        # No clear impact or off-board; keep the existing baseline for now.
+        print(f"[DETECT] No impact detected (reason={reason}).")
+        return jsonify({"ok": True, "hit": None, "reason": reason or "no_impact"})
+
+    # We have a valid hit; update the rolling baseline to the latest frame
+    try:
+        shutil.copy2(AFTER_PATH, BEFORE_PATH)
+        print("[DETECT] Baseline updated after valid hit.")
+    except Exception as e:
+        print("WARNING: Failed to update baseline:", e)
+
+    ring = hit_info.get("ring")
+    sector = hit_info.get("sector")
+    cx = float(hit_info.get("x", 0.0))
+    cy = float(hit_info.get("y", 0.0))
+
+    # Normalise bull labels a bit for the front-end
+    if ring == "inner_bull":
+        hit_type = "inner_bull"
+    elif ring == "outer_bull":
+        hit_type = "outer_bull"
+    elif ring == "miss" or sector is None:
+        hit_type = "miss"
+    else:
+        hit_type = ring  # "single", "double", "treble"
+
+    return jsonify({
+        "ok": True,
+        "hit": {
+            "type": hit_type,
+            "sector": sector,
+            "x": cx,
+            "y": cy,
+        }
+    })
+
+
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5050, debug=True)

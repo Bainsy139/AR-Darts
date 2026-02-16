@@ -35,7 +35,11 @@ function saveCal() {
         CX: CENTER_X_FUDGE,
         CY: CENTER_Y_FUDGE,
         ROT: ROT_OFFSET_DEG,
-      })
+        IMG_ROT: BOARD_IMG_ROT_DEG,
+        IMG_SCALE: BOARD_IMG_SCALE,
+        IMG_X: BOARD_IMG_X,
+        IMG_Y: BOARD_IMG_Y,
+      }),
     );
   } catch (_) {}
 }
@@ -104,8 +108,22 @@ let game = {
   x01Start: BOOT_X01_START,
   doubleOut: BOOT_DOUBLE_OUT,
   players: [
-    { name: "Player 1", idx: 0, score: BOOT_X01_START, done: false },
-    { name: "Player 2", idx: 0, score: BOOT_X01_START, done: false },
+    {
+      name: "Player 1",
+      idx: 0,
+      score: BOOT_X01_START,
+      done: false,
+      lastHit: null, // ← persists until THIS player throws again
+      turnThrows: [], // "hit" | "miss" for the CURRENT turn
+    },
+    {
+      name: "Player 2",
+      idx: 0,
+      score: BOOT_X01_START,
+      done: false,
+      lastHit: null,
+      turnThrows: [],
+    },
   ],
   turn: 0,
   throwsLeft: 3,
@@ -119,7 +137,15 @@ let game = {
 let BOARD_RADIUS_FUDGE = 0.92;
 let CENTER_X_FUDGE = 0;
 let CENTER_Y_FUDGE = 0;
-let ROT_OFFSET_DEG = 0;
+
+// Sector math / hit detection rotation
+let ROT_OFFSET_DEG = 2;
+
+// Visual-only board image transform
+let BOARD_IMG_ROT_DEG = 0;
+let BOARD_IMG_SCALE = 1.0;
+let BOARD_IMG_X = 0;
+let BOARD_IMG_Y = 0;
 // Initial visibility of guides / panel from storage
 let SHOW_CAL_PANEL = loadCalUi();
 // Apply any saved calibration
@@ -129,13 +155,17 @@ let SHOW_CAL_PANEL = loadCalUi();
   if (typeof s.CX === "number") CENTER_X_FUDGE = s.CX;
   if (typeof s.CY === "number") CENTER_Y_FUDGE = s.CY;
   if (typeof s.ROT === "number") ROT_OFFSET_DEG = s.ROT;
+  if (typeof s.IMG_ROT === "number") BOARD_IMG_ROT_DEG = s.IMG_ROT;
+  if (typeof s.IMG_SCALE === "number") BOARD_IMG_SCALE = s.IMG_SCALE;
+  if (typeof s.IMG_X === "number") BOARD_IMG_X = s.IMG_X;
+  if (typeof s.IMG_Y === "number") BOARD_IMG_Y = s.IMG_Y;
 })();
 
 // --- Visual guides toggle & ring ratios ---
 let SHOW_GUIDES = true; // controlled by checkbox in UI
 const RATIOS = {
   outer: 1.0,
-  doubleInner: 0.94,
+  doubleInner: 0.95,
   tripleOuter: 0.63,
   tripleInner: 0.57,
   bullOuter: 0.09,
@@ -146,6 +176,17 @@ const container = document.getElementById("board-container");
 const overlay = document.getElementById("overlay");
 const board = document.getElementById("dartboard");
 const statusEl = document.getElementById("status");
+// ---------------------------------------------------------
+// Board image rotation (now decoupled from ROT_OFFSET_DEG)
+// ---------------------------------------------------------
+function applyBoardImageTransform() {
+  if (!board) return;
+  board.style.transformOrigin = "50% 50%";
+  board.style.transform =
+    `translate(${BOARD_IMG_X}px, ${BOARD_IMG_Y}px) ` +
+    `scale(${BOARD_IMG_SCALE}) ` +
+    `rotate(${BOARD_IMG_ROT_DEG}deg)`;
+}
 
 const ctx = overlay.getContext("2d");
 
@@ -212,14 +253,64 @@ function playSfx(kind) {
   }
 }
 
-// Mirror hit/status text into the active player's side HUD "Last hit" line
-function setLastHitText(text) {
-  const activeId = game.turn === 0 ? "p1-last" : "p2-last";
-  const otherId = game.turn === 0 ? "p2-last" : "p1-last";
-  const a = document.getElementById(activeId);
-  const b = document.getElementById(otherId);
-  if (a) a.textContent = text;
-  if (b) b.textContent = ""; // keep inactive side quiet
+// ---------------------------------------------
+// PLAYER CARD STATE HELPERS
+// ---------------------------------------------
+
+/**
+ * Records the last hit for the CURRENT player only.
+ * This value persists across turn changes.
+ * It is overwritten only when THIS player throws again.
+ */
+function recordLastHit(label) {
+  // Set the last hit label for the player whose turn it is
+  const p = game.players[game.turn];
+  p.lastHit = label;
+}
+
+// SIMPLE + DIRECT UI UPDATE
+// No render cycle, no abstraction, no guessing.
+function updateLastHitUI(playerIndex, label) {
+  const el = document.getElementById(playerIndex === 0 ? "p1-last" : "p2-last");
+  if (el) {
+    el.textContent = `Last hit: ${label}`;
+  }
+}
+
+// SIMPLE + DIRECT TARGET UPDATE
+// Updates the player card target immediately after a hit.
+function updateTargetUI(playerIndex) {
+  const el = document.getElementById(
+    playerIndex === 0 ? "p1-target" : "p2-target",
+  );
+  if (!el) return;
+
+  const p = game.players[playerIndex];
+
+  if (game.mode === "x01") {
+    el.textContent = `Need: ${p.score}`;
+  } else {
+    const t = TARGETS[p.idx];
+    el.textContent = `To hit: ${t === "bull" ? "Bull" : t}`;
+  }
+}
+
+// SIMPLE + DIRECT THROWS TRACKER UPDATE
+// Renders: 🎯 (not yet thrown), ✅ (hit), ❌ (miss)
+function updateThrowsUI(playerIndex) {
+  const el = document.getElementById(
+    playerIndex === 0 ? "p1-throws" : "p2-throws",
+  );
+  if (!el) return;
+
+  const p = game.players[playerIndex];
+  const icons = [];
+  for (let i = 0; i < 3; i++) {
+    if (p.turnThrows[i] === "hit") icons.push("✅");
+    else if (p.turnThrows[i] === "miss") icons.push("❌");
+    else icons.push("🎯");
+  }
+  el.textContent = `Throws: ${icons.join(" ")}`;
 }
 
 function resizeOverlay() {
@@ -241,7 +332,7 @@ function drawFade() {
     Math.max(1, radius * 0.2),
     cx - rect.left,
     cy - rect.top,
-    Math.max(overlay.width, overlay.height) * 0.6
+    Math.max(overlay.width, overlay.height) * 0.6,
   );
   g.addColorStop(0, "rgba(0,0,0,0.0)");
   g.addColorStop(1, "rgba(0,0,0,0.10)");
@@ -254,9 +345,9 @@ function drawFade() {
 function ringFromRadiusFrac(r) {
   if (r <= 0.05) return "inner_bull";
   if (r <= 0.12) return "outer_bull";
-  if (r >= 0.85 && r <= 0.95) return "double";
-  if (r >= 0.5 && r <= 0.6) return "treble";
-  if (r > 1.02) return "miss";
+  if (r >= 0.94 && r <= 1.0) return "double";
+  if (r >= 0.57 && r <= 0.65) return "treble";
+  if (r > 1.0) return "miss";
   return "single";
 }
 
@@ -295,7 +386,7 @@ function drawGuides(cxLocal, cyLocal, radius) {
   if (!SHOW_GUIDES) return;
   ctx.save();
   ctx.lineWidth = 1;
-  ctx.strokeStyle = "rgba(0,255,255,0.55)";
+  ctx.strokeStyle = "rgba(0, 255, 255, 1)";
   const rings = [
     radius * RATIOS.outer,
     radius * RATIOS.doubleInner,
@@ -349,10 +440,10 @@ function drawATWTargetHighlight(cxLocal, cyLocal, radius) {
       rInner,
       cxLocal,
       cyLocal,
-      rOuter
+      rOuter,
     );
     g.addColorStop(0, "rgba(0,255,200,0.25)");
-    g.addColorStop(1, "rgba(0,255,200,0.0)");
+    g.addColorStop(1, "rgba(0, 255, 200, 1)");
     ctx.fillStyle = g;
     ctx.beginPath();
     ctx.arc(cxLocal, cyLocal, rOuter, 0, Math.PI * 2);
@@ -373,9 +464,10 @@ function drawATWTargetHighlight(cxLocal, cyLocal, radius) {
         aStart - Math.PI / 2 + (ROT_OFFSET_DEG * Math.PI) / 180;
       const thetaEnd = aEnd - Math.PI / 2 + (ROT_OFFSET_DEG * Math.PI) / 180;
       const rOut = radius * RATIOS.outer * 1.01;
-      ctx.fillStyle = "rgba(0,255,200,0.12)";
-      ctx.strokeStyle = "rgba(0,255,200,0.65)";
-      ctx.lineWidth = 2;
+      //this is the line to colour the sector wedge in ATW
+      ctx.fillStyle = "rgba(180, 255, 0, 1)";
+      ctx.strokeStyle = "rgba(255, 47, 47, 1)";
+      ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.moveTo(cxLocal, cyLocal);
       ctx.arc(cxLocal, cyLocal, rOut, thetaStart, thetaEnd, false);
@@ -392,9 +484,15 @@ function hookCalibrationPanel() {
   const dy = document.getElementById("cal-dy");
   const rot = document.getElementById("cal-rot");
   const tog = document.getElementById("cal-toggle");
+  const imgRot = document.getElementById("cal-img-rot");
+  const imgRotVal = document.getElementById("cal-img-rot-val");
   const panel = document.getElementById("cal-panel");
   const btnCal = document.getElementById("btn-cal");
-  if (!rx || !dx || !dy || !rot || !tog) return; // panel not present
+  // --- Numeric calibration input lookups ---
+  const imgScale = document.getElementById("cal-img-scale");
+  const imgX = document.getElementById("cal-img-x");
+  const imgY = document.getElementById("cal-img-y");
+  if (!panel || !btnCal) return; // require panel + button only
   if (panel) {
     panel.classList.toggle("hidden", !SHOW_CAL_PANEL);
   }
@@ -414,45 +512,90 @@ function hookCalibrationPanel() {
     if (dxVal) dxVal.textContent = CENTER_X_FUDGE;
     if (dyVal) dyVal.textContent = CENTER_Y_FUDGE;
     if (rotVal) rotVal.textContent = ROT_OFFSET_DEG.toFixed(1);
+    if (imgRotVal) imgRotVal.textContent = BOARD_IMG_ROT_DEG.toFixed(1);
   };
-  rx.value = BOARD_RADIUS_FUDGE.toFixed(3);
-  dx.value = CENTER_X_FUDGE;
-  dy.value = CENTER_Y_FUDGE;
-  rot.value = ROT_OFFSET_DEG;
-  tog.checked = SHOW_GUIDES;
+  if (rx) rx.value = BOARD_RADIUS_FUDGE.toFixed(3);
+  if (dx) dx.value = CENTER_X_FUDGE;
+  if (dy) dy.value = CENTER_Y_FUDGE;
+  if (rot) rot.value = ROT_OFFSET_DEG;
+  if (imgRot) imgRot.value = BOARD_IMG_ROT_DEG;
+  if (tog) tog.checked = SHOW_GUIDES;
+  // --- Image calibration input initial value sync ---
+  if (imgScale) imgScale.value = BOARD_IMG_SCALE.toFixed(3);
+  if (imgX) imgX.value = BOARD_IMG_X;
+  if (imgY) imgY.value = BOARD_IMG_Y;
   if (panel && panel.classList.contains("hidden")) {
     // no-op
   }
   sync();
-  rx.addEventListener("input", () => {
-    BOARD_RADIUS_FUDGE = parseFloat(rx.value);
-    drawFade();
-    sync();
-    saveCal();
-  });
-  dx.addEventListener("input", () => {
-    CENTER_X_FUDGE = parseInt(dx.value || "0");
-    drawFade();
-    sync();
-    saveCal();
-  });
-  dy.addEventListener("input", () => {
-    CENTER_Y_FUDGE = parseInt(dy.value || "0");
-    drawFade();
-    sync();
-    saveCal();
-  });
-  rot.addEventListener("input", () => {
-    ROT_OFFSET_DEG = parseFloat(rot.value) || 0;
-    drawFade();
-    sync();
-    saveCal();
-  });
-  tog.addEventListener("change", () => {
-    SHOW_GUIDES = !!tog.checked;
-    drawFade();
-    saveCal();
-  });
+  if (rx) {
+    rx.addEventListener("input", () => {
+      BOARD_RADIUS_FUDGE = parseFloat(rx.value) || BOARD_RADIUS_FUDGE;
+      drawFade();
+      saveCal();
+    });
+  }
+
+  if (dx) {
+    dx.addEventListener("input", () => {
+      CENTER_X_FUDGE = parseInt(dx.value || "0", 10);
+      drawFade();
+      saveCal();
+    });
+  }
+
+  if (dy) {
+    dy.addEventListener("input", () => {
+      CENTER_Y_FUDGE = parseInt(dy.value || "0", 10);
+      drawFade();
+      saveCal();
+    });
+  }
+  if (rot) {
+    rot.addEventListener("input", () => {
+      ROT_OFFSET_DEG = parseFloat(rot.value) || 0;
+      drawFade(); // keep overlay + highlights aligned
+      sync();
+      saveCal();
+    });
+  }
+  if (imgRot) {
+    imgRot.addEventListener("input", () => {
+      BOARD_IMG_ROT_DEG = parseFloat(imgRot.value) || 0;
+      applyBoardImageTransform();
+      sync();
+      saveCal();
+    });
+  }
+  // --- Image calibration input listeners ---
+  if (imgScale) {
+    imgScale.addEventListener("input", () => {
+      BOARD_IMG_SCALE = parseFloat(imgScale.value) || BOARD_IMG_SCALE;
+      applyBoardImageTransform();
+      saveCal();
+    });
+  }
+  if (imgX) {
+    imgX.addEventListener("input", () => {
+      BOARD_IMG_X = parseInt(imgX.value || "0");
+      applyBoardImageTransform();
+      saveCal();
+    });
+  }
+  if (imgY) {
+    imgY.addEventListener("input", () => {
+      BOARD_IMG_Y = parseInt(imgY.value || "0");
+      applyBoardImageTransform();
+      saveCal();
+    });
+  }
+  if (tog) {
+    tog.addEventListener("change", () => {
+      SHOW_GUIDES = !!tog.checked;
+      drawFade();
+      saveCal();
+    });
+  }
 }
 
 async function logToServer(payload) {
@@ -465,6 +608,122 @@ async function logToServer(payload) {
     await res.json();
   } catch (e) {
     console.warn("Log failed (OK if backend not running):", e);
+  }
+}
+
+// -------------------------------------------------------------------------------------------------
+// Camera endpoints and detection helpers
+// -------------------------------------------------------------------------------------------------
+async function captureBoardBefore() {
+  try {
+    const res = await fetch("/capture-before", { method: "POST" });
+    const data = await res.json();
+    if (!data.ok) throw new Error("capture failed");
+    if (statusEl) {
+      statusEl.textContent =
+        "Board captured. Throw a dart, then press Detect Dart.";
+    }
+  } catch (e) {
+    console.warn("capture-before failed:", e);
+    if (statusEl) {
+      statusEl.textContent = "Capture failed – check Pi logs.";
+    }
+  }
+}
+
+function normaliseDetectionHit(hit) {
+  if (!hit) return { ring: "miss", sector: null };
+  const t = hit.type;
+  if (t === "inner_bull" || t === "outer_bull") {
+    // Sector is unused for bulls in our scoring, but keep it sane
+    return { ring: t, sector: 25 };
+  }
+  if (t === "miss" || hit.sector == null) {
+    return { ring: "miss", sector: null };
+  }
+  return { ring: t, sector: hit.sector };
+}
+
+async function detectDartFromCamera() {
+  try {
+    const res = await fetch("/detect", { method: "POST" });
+    const data = await res.json();
+    if (!data.ok) {
+      throw new Error("detect endpoint returned !ok");
+    }
+    // --- CAMERA: No impact detected ---
+    if (!data.hit) {
+      if (statusEl) statusEl.textContent = "No impact detected.";
+      const throwingPlayer = game.turn;
+      recordLastHit("Miss");
+      updateLastHitUI(throwingPlayer, "Miss");
+      game.players[throwingPlayer].turnThrows.push("miss");
+      updateThrowsUI(throwingPlayer);
+      return;
+    }
+
+    const { ring, sector } = normaliseDetectionHit(data.hit);
+
+    // --- CAMERA: Miss detected ---
+    if (ring === "miss") {
+      if (statusEl) statusEl.textContent = "Detected: Miss";
+      const throwingPlayer = game.turn;
+      recordLastHit("Miss");
+      updateLastHitUI(throwingPlayer, "Miss");
+      game.players[throwingPlayer].turnThrows.push("miss");
+      updateThrowsUI(throwingPlayer);
+      return;
+    }
+
+    // Auto-start game if not already active
+    if (!game.active) {
+      startGame();
+    }
+
+    // Ensure audio is ready
+    unmuteSfx();
+    ensureAudio();
+
+    // Human‑readable label for this dart
+    const label = ring.includes("bull")
+      ? ring.replace("_", " ")
+      : `${ring} ${sector}`;
+
+    if (statusEl) {
+      statusEl.textContent = `Detected: ${label}`;
+    }
+
+    // Capture who is throwing BEFORE engine mutates turn
+    const throwingPlayer = game.turn;
+
+    recordLastHit(label);
+    updateLastHitUI(throwingPlayer, label);
+
+    // Record this dart for the active turn
+    game.players[throwingPlayer].turnThrows.push("hit");
+    updateThrowsUI(throwingPlayer);
+
+    // Feed the detected hit into the engine
+    applyHit(ring, sector);
+
+    // Update target for the player who actually threw
+    updateTargetUI(throwingPlayer);
+
+    // Update target AFTER engine logic
+
+    // Optionally log this to the server as well
+    logToServer({
+      source: "camera",
+      ring,
+      sector,
+      cx: data.hit.x,
+      cy: data.hit.y,
+    });
+  } catch (e) {
+    console.warn("detect failed:", e);
+    if (statusEl) {
+      statusEl.textContent = "Detect failed – check Pi logs.";
+    }
   }
 }
 
@@ -494,6 +753,7 @@ class GameEngine {
       p.done = false;
       p.idx = 0;
       p.score = this.g.x01Start;
+      p.turnThrows = [];
     });
     this.g.turnStartScore = this.g.players[0].score;
     this.mode.onStart(this);
@@ -515,6 +775,7 @@ class GameEngine {
       p.done = false;
       p.idx = 0;
       p.score = this.g.x01Start;
+      p.turnThrows = [];
     });
     this.g.turnStartScore = this.g.x01Start;
     console.info("[Engine] reset");
@@ -523,6 +784,9 @@ class GameEngine {
     const prevTurn = this.g.turn;
     this.g.turn = (this.g.turn + 1) % this.g.players.length;
     this.g.throwsLeft = 3; // exactly three darts per turn
+    // Reset throw tracker for the new active player and update UI immediately
+    this.g.players[this.g.turn].turnThrows = [];
+    updateThrowsUI(this.g.turn);
     this.g.turnStartScore = this.g.players[this.g.turn].score;
     // Redraw overlay so ATW highlight updates on turn change
     drawFade();
@@ -533,22 +797,7 @@ class GameEngine {
       if (badge) badge.textContent = `Player ${this.g.turn + 1} to throw`;
     } catch (_) {}
 
-    // Clear last-hit on previous card and prime current card with a simple cue
-    try {
-      const prevId = prevTurn === 0 ? "p1-last" : "p2-last";
-      const curId = this.g.turn === 0 ? "p1-last" : "p2-last";
-      const curP = this.g.players[this.g.turn];
-      const prevEl = document.getElementById(prevId);
-      const curEl = document.getElementById(curId);
-      if (prevEl) prevEl.textContent = "";
-      if (curEl) {
-        if (this.g.mode === "around") {
-          curEl.textContent = `Your turn — to hit: ${atwTargetText(curP)}`;
-        } else {
-          curEl.textContent = `Your turn — need ${curP.score}`;
-        }
-      }
-    } catch (_) {}
+    // Player card DOM writes removed; cards are updated only in renderPlayers()
 
     // Clear, explicit status for the new player
     try {
@@ -708,19 +957,16 @@ const AroundMode = {
       if (win) {
         const msg = `Hit: ${hitLabel} • advanced +${advance} • Winner: ${p.name} 🎯`;
         statusEl.textContent = msg;
-        setLastHitText(msg);
       } else if (advance === 0) {
         const msg = afterZero
           ? `Hit: ${hitLabel} • no advance • Turn complete. Player ${nextPlayerNum} is up!`
           : `Hit: ${hitLabel} • no advance • still to hit: ${nextTgt}`;
         statusEl.textContent = msg;
-        setLastHitText(msg);
       } else {
         const msg = afterZero
           ? `Hit: ${hitLabel} • advanced +${advance} • Turn complete. Player ${nextPlayerNum} is up!`
           : `Hit: ${hitLabel} • advanced +${advance} • now to hit: ${nextTgt}`;
         statusEl.textContent = msg;
-        setLastHitText(msg);
       }
     }
 
@@ -774,7 +1020,6 @@ const X01Mode = {
             ? `Hit: ${hitLabel} • not a double → Bust! Turn complete. Player ${nextPlayerNum} is up!`
             : `Hit: ${hitLabel} • Bust! Turn complete. Player ${nextPlayerNum} is up!`;
         statusEl.textContent = msg;
-        setLastHitText(msg);
       }
       return { bust: true };
     }
@@ -788,7 +1033,6 @@ const X01Mode = {
         if (typeof statusEl !== "undefined" && statusEl) {
           const msg = `Hit: ${hitLabel} • Checkout! Winner: ${p.name} 🎯`;
           statusEl.textContent = msg;
-          setLastHitText(msg);
         }
         return { win: true, note: "checkout" };
       }
@@ -804,7 +1048,6 @@ const X01Mode = {
           ? `Hit: ${hitLabel} • need ${next} • Turn complete. Player ${nextPlayerNum} is up!`
           : `Hit: ${hitLabel} • need ${next}`;
       statusEl.textContent = msg;
-      setLastHitText(msg);
     }
 
     // Inform the engine to consume the dart normally and continue
@@ -873,6 +1116,12 @@ function renderPlayers() {
   const undoBtn = document.getElementById("btn-undo");
   if (undoBtn) undoBtn.disabled = game.history.length === 0;
 
+  // =====================================================
+  // PLAYER CARDS (Side HUD)
+  // Cards are PURELY state‑driven.
+  // They never show instructions or turn text.
+  // =====================================================
+
   // --- Side HUD (left/right) wiring for projection ---
   const p1 = game.players[0];
   const p2 = game.players[1];
@@ -900,6 +1149,20 @@ function renderPlayers() {
   if (p2NameEl) p2NameEl.textContent = p2.name;
   if (p1TargetEl) p1TargetEl.textContent = formatTarget(p1);
   if (p2TargetEl) p2TargetEl.textContent = formatTarget(p2);
+
+  // --- PLAYER CARD: Persistent last hit ---
+  // This survives turn switches and only updates
+  // when THAT player throws again.
+  if (p1LastEl) {
+    p1LastEl.textContent = p1.lastHit
+      ? `Last hit: ${p1.lastHit}`
+      : "Last hit: —";
+  }
+  if (p2LastEl) {
+    p2LastEl.textContent = p2.lastHit
+      ? `Last hit: ${p2.lastHit}`
+      : "Last hit: —";
+  }
 
   // Show throws left for the active player; clear or dash for the other
   // (Removed p1ThrowsEl/p2ThrowsEl textContent setting)
@@ -933,6 +1196,9 @@ let ENGINE = new GameEngine(game);
 function resetGame() {
   ENGINE.reset();
   renderPlayers();
+  updateThrowsUI(0);
+  updateThrowsUI(1);
+  applyBoardImageTransform();
 }
 function startGame() {
   game.mode = BOOT_MODE;
@@ -951,6 +1217,9 @@ function startGame() {
     }
   }
   renderPlayers();
+  updateThrowsUI(0);
+  updateThrowsUI(1);
+  applyBoardImageTransform();
 }
 function nextPlayer() {
   ENGINE.nextPlayer();
@@ -995,17 +1264,32 @@ function handleClick(e) {
   drawMarker(
     x,
     y,
-    ring.includes("bull") ? ring.replace("_", " ") : `${ring} ${sectorNum}`
+    ring.includes("bull") ? ring.replace("_", " ") : `${ring} ${sectorNum}`,
   );
+
+  // Human‑readable label for this dart
+  const hitLabel = ring.includes("bull")
+    ? ring.replace("_", " ")
+    : `${ring} ${sectorNum}`;
+
   if (statusEl) {
-    statusEl.textContent = ring.includes("bull")
-      ? `Hit: ${ring.replace("_", " ")}`
-      : `Hit: ${ring} ${sectorNum}`;
-    setLastHitText(statusEl.textContent);
+    statusEl.textContent = `Hit: ${hitLabel}`;
   }
 
-  // Apply the hit (counts as a dart)
+  // Capture who is throwing BEFORE engine mutates turn
+  const throwingPlayer = game.turn;
+
+  recordLastHit(hitLabel);
+  updateLastHitUI(throwingPlayer, hitLabel);
+
+  // Record this dart for the active turn (any registered board hit counts as a hit)
+  game.players[throwingPlayer].turnThrows.push("hit");
+  updateThrowsUI(throwingPlayer);
+
   applyHit(ring, sectorNum);
+
+  // Update target for the player who actually threw
+  updateTargetUI(throwingPlayer);
 
   console.log("CLICK", { x, y, ring, secIdx, sectorNum });
   logToServer({ ring, sectorIndex: secIdx, px: x, py: y });
@@ -1042,13 +1326,22 @@ window.addEventListener("keydown", (e) => {
       BOARD_RADIUS_FUDGE -= stepRad;
       changed = true;
       break;
+    case "[":
+      BOARD_IMG_ROT_DEG -= 0.5;
+      changed = true;
+      break;
+    case "]":
+      BOARD_IMG_ROT_DEG += 0.5;
+      changed = true;
+      break;
   }
   if (changed) {
+    applyBoardImageTransform();
     drawFade();
     statusEl.textContent = `Cal: R=${BOARD_RADIUS_FUDGE.toFixed(
-      3
+      3,
     )}  dx=${CENTER_X_FUDGE}  dy=${CENTER_Y_FUDGE}  rot=${ROT_OFFSET_DEG.toFixed(
-      1
+      1,
     )}°`;
     saveCal();
   }
@@ -1060,16 +1353,27 @@ window.addEventListener("DOMContentLoaded", () => {
   hookCalibrationPanel();
   drawFade();
   initSfx();
-});
-window.addEventListener("DOMContentLoaded", () => {
+  applyBoardImageTransform();
   const s = document.getElementById("btn-start");
   const r = document.getElementById("btn-reset");
   const u = document.getElementById("btn-undo");
+  const c = document.getElementById("btn-capture");
+  const d = document.getElementById("btn-detect");
   if (s) s.addEventListener("click", startGame);
   if (r) r.addEventListener("click", resetGame);
   if (u) u.addEventListener("click", undo);
+  if (c)
+    c.addEventListener("click", () => {
+      captureBoardBefore();
+    });
+  if (d)
+    d.addEventListener("click", () => {
+      detectDartFromCamera();
+    });
   ENGINE.setMode(game.mode); // reflect boot mode before Start
   renderPlayers();
+  updateThrowsUI(0);
+  updateThrowsUI(1);
 });
 window.addEventListener("keydown", (e) => {
   if ((e.key === "c" || e.key === "C") && (e.ctrlKey || e.metaKey)) {
@@ -1085,3 +1389,5 @@ window.addEventListener("keydown", (e) => {
 });
 board.addEventListener("load", resizeOverlay);
 overlay.addEventListener("click", handleClick);
+
+// --- Legacy setLastHitText function fully removed ---
