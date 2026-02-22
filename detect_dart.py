@@ -248,7 +248,7 @@ def find_dart_center(before_img, after_img, debug_img=None):
 
     # Make sure we're travelling away from flight (positive direction)
     # If axis points upward (negative Y), flip it
-    if axis[1] < 0:
+    if axis[1] > 0:
         tip = flight - axis * travel
 
     tip = (float(tip[0]), float(tip[1]))
