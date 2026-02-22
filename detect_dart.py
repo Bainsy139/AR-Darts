@@ -110,17 +110,22 @@ def _compute_warp_from_aruco(img):
     try:
         dictionary = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
         params = aruco.DetectorParameters()
-    except:
+        detector = aruco.ArucoDetector(dictionary, params)
+    except Exception as e:
+        print(f"[ARUCO] Failed to create detector: {e}")
         return None
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    corners, ids, _ = aruco.detectMarkers(gray, dictionary, parameters=params)
+    corners, ids, _ = detector.detectMarkers(gray)
+    
     if ids is None or len(ids) < 4:
+        print(f"[ARUCO] Detection failed - found {0 if ids is None else len(ids)} markers, need 4. Falling back to DEFAULT_SRC_POINTS")
         return None
 
     ids = ids.flatten()
-    required = [0,1,2,3]
+    required = [0, 1, 2, 3]
     if not all(r in ids for r in required):
+        print(f"[ARUCO] Missing required markers. Found: {ids}. Falling back to DEFAULT_SRC_POINTS")
         return None
 
     src = []
@@ -129,6 +134,7 @@ def _compute_warp_from_aruco(img):
         c = corners[idx][0].mean(axis=0)
         src.append(c)
 
+    print(f"[ARUCO] All 4 markers found! Computing warp matrix.")
     src = np.float32(src)
     return cv2.getPerspectiveTransform(src, DST_POINTS)
 
