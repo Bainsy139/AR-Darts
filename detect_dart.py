@@ -32,10 +32,10 @@ USE_WARP = True
 USE_ARUCO_WARP = True
 
 DEFAULT_SRC_POINTS = np.float32([
-    [1039, 483],  # top
-    [1195, 617],  # right
-    [1045, 738],  # bottom
-    [890,  627],  # left
+    [1842, 631],  # id=0 top-left (after flip)
+    [213,  762],  # id=1 top-right (after flip)
+    [1623, 205],  # id=2 bottom-left (after flip)
+    [352,  301],  # id=3 bottom-right (after flip)
 ])
 
 DST_POINTS = np.float32([
