@@ -36,15 +36,15 @@ USE_ARUCO_WARP = True
 
 # Output frame size
 FRAME_W = 1920
-FRAME_H = 1080
+FRAME_H = 669
 
 # ArUco warp destination: the 4 markers map to the full frame corners.
 # Order matches marker IDs: 0=top-left, 1=top-right, 2=bottom-left, 3=bottom-right
 ARUCO_DST = np.float32([
-    [0,        0       ],  # id=0 → top-left
-    [FRAME_W,  0       ],  # id=1 → top-right
-    [0,        FRAME_H ],  # id=2 → bottom-left
-    [FRAME_W,  FRAME_H ],  # id=3 → bottom-right
+    [0,    0  ],   # id=0 → top-left
+    [1920, 0  ],   # id=1 → top-right
+    [0,    669],   # id=2 → bottom-left
+    [1920, 669],   # id=3 → bottom-right
 ])
 
 # detection tuning
