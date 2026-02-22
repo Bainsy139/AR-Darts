@@ -28,7 +28,7 @@ SECTORS = [
 
 CAMERA_UPSIDE_DOWN = True
 
-USE_WARP = True
+USE_WARP = False
 USE_ARUCO_WARP = True
 
 DST_POINTS = np.float32([
