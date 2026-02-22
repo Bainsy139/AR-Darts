@@ -51,7 +51,7 @@ ARUCO_DST = np.float32([
 DIFF_THRESHOLD = 15
 MIN_BLOB_AREA = 10
 
-DART_LENGTH_PX = 70
+DART_LENGTH_PX = 35
 
 
 # ------------------------------
