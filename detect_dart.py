@@ -377,9 +377,10 @@ def main():
         # Show ArUco markers
         try:
             aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
-            params = aruco.DetectorParameters_create()
+            params = aruco.DetectorParameters()
             gray = cv2.cvtColor(before, cv2.COLOR_BGR2GRAY)
-            corners, ids, _ = aruco.detectMarkers(gray, aruco_dict, parameters=params)
+            detector = aruco.ArucoDetector(aruco_dict, params)
+            corners, ids, _ = detector.detectMarkers(gray)
 
             if ids is not None:
                 aruco.drawDetectedMarkers(before, corners, ids)
