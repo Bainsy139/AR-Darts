@@ -51,6 +51,8 @@ ARUCO_DST = np.float32([
 DIFF_THRESHOLD = 15
 MIN_BLOB_AREA = 10
 
+DART_LENGTH_PX = 70
+
 
 # ------------------------------
 # RING / SECTOR CLASSIFICATION
@@ -180,7 +182,6 @@ def load_image(path: str):
 def preprocess_for_diff(img):
     return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
-DART_LENGTH_PX = 140
 
 def find_dart_center(before_img, after_img, debug_img=None):
     g_before = preprocess_for_diff(before_img)
