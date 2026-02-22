@@ -47,11 +47,9 @@ ARUCO_DST = np.float32([
     [1920, 669],   # id=3 → bottom-right
 ])
 
-# detection tuning
+# Detection tuning
 DIFF_THRESHOLD = 15
 MIN_BLOB_AREA = 10
-
-DART_LENGTH_PX = 35
 
 
 # ------------------------------
@@ -184,11 +182,20 @@ def preprocess_for_diff(img):
 
 
 def find_dart_center(before_img, after_img, debug_img=None):
+    """
+    Finds the dart tip by:
+    1. Diffing before/after images to find changed pixels
+    2. Masking to board area only
+    3. Finding the largest connected blob
+    4. Returning the bottommost pixel of that blob as the tip
+       (camera is above the board, so the tip always appears lowest on screen)
+    """
     g_before = preprocess_for_diff(before_img)
     g_after = preprocess_for_diff(after_img)
 
     diff = cv2.absdiff(g_before, g_after)
 
+    # Mask to board area only
     h, w = diff.shape
     yy, xx = np.mgrid[0:h, 0:w]
     dx = xx - BOARD_CX
@@ -197,25 +204,26 @@ def find_dart_center(before_img, after_img, debug_img=None):
     mask = (r <= BOARD_RADIUS * 1.1)
     diff = np.where(mask, diff, 0).astype(np.uint8)
 
+    # Threshold
     diff_bin = (diff > DIFF_THRESHOLD).astype(np.uint8) * 255
 
+    # Close small gaps
     k = np.ones((3, 3), np.uint8)
     diff_bin = cv2.morphologyEx(diff_bin, cv2.MORPH_CLOSE, k, iterations=1)
 
+    # Find connected components
     num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(diff_bin, connectivity=8)
 
+    # Pick the largest blob (by area) that meets minimum size
     best_label = None
-    best_top = None
     best_area = 0
 
     for lab in range(1, num_labels):
         area = stats[lab, cv2.CC_STAT_AREA]
         if area < MIN_BLOB_AREA:
             continue
-        top = stats[lab, cv2.CC_STAT_TOP]
-        if best_label is None or top < best_top or (top == best_top and area > best_area):
+        if area > best_area:
             best_label = lab
-            best_top = top
             best_area = area
 
     if best_label is None:
@@ -225,44 +233,28 @@ def find_dart_center(before_img, after_img, debug_img=None):
 
     comp = (labels == best_label).astype(np.uint8) * 255
 
-    # Get all blob pixels
-    ys, xs = np.where(comp > 0)
-    if len(xs) == 0:
-        return None, comp
-
-    # PCA to find principal axis of the dart blob
-    pts = np.column_stack([xs, ys]).astype(np.float32)
-    mean, eigenvectors = cv2.PCACompute(pts, mean=None)
-    axis = eigenvectors[0]  # principal axis direction (unit vector)
-
-    # Flight end = topmost pixel (lowest Y value)
-    i_flight = np.argmin(ys)
-    flight = np.array([float(xs[i_flight]), float(ys[i_flight])])
-
-    # Project all blob pixels onto the axis from the flight point
-    projections = (pts - flight) @ axis
-    max_proj = projections.max()
-
-    # Travel DART_LENGTH_PX along axis from flight, capped at blob extent
-    travel = min(DART_LENGTH_PX, max_proj)
-    tip = flight + axis * travel
-
-    # Make sure we're travelling away from flight (positive direction)
-    # If axis points upward (negative Y), flip it
-    if axis[1] > 0:
-        tip = flight - axis * travel
-
-    tip = (float(tip[0]), float(tip[1]))
-
     if debug_img is not None:
         cnts, _ = cv2.findContours(comp, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if cnts:
             c = max(cnts, key=cv2.contourArea)
             cv2.drawContours(debug_img, [c], -1, (0, 255, 0), 2)
-        cv2.circle(debug_img, (int(flight[0]), int(flight[1])), 4, (255, 165, 0), -1)
+
+    ys, xs = np.where(comp > 0)
+    if len(xs) == 0:
+        if debug_img is not None:
+            cv2.imwrite("debug_last_blob.jpg", debug_img)
+        return None, comp
+
+    # Tip = bottommost pixel (highest Y value)
+    # Camera is above board so tip always appears lowest on screen
+    i = np.argmax(ys)
+    tip = (float(xs[i]), float(ys[i]))
+
+    if debug_img is not None:
         cv2.circle(debug_img, (int(tip[0]), int(tip[1])), 4, (0, 0, 255), -1)
 
     return tip, comp
+
 
 # ------------------------------
 # DEBUG OVERLAY DRAWING
@@ -332,7 +324,6 @@ def main():
         if len(sys.argv) != 5:
             print("Usage: python3 detect_dart.py overlayhit BEFORE.jpg AFTER.jpg OUTPUT.jpg")
             sys.exit(1)
-        import datetime
         before = load_image(sys.argv[2])
         after = load_image(sys.argv[3])
         debug = after.copy()
