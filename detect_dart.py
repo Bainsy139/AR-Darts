@@ -17,9 +17,9 @@ except ImportError:
 # Board position in the flat (warped) image.
 # If warp succeeds, these describe the board in the corrected frame.
 # If warp fails, these describe the board in the raw flipped image.
-BOARD_CX = 925
-BOARD_CY = 635
-BOARD_RADIUS = 393
+BOARD_CX = 993
+BOARD_CY = 344
+BOARD_RADIUS = 206
 
 ROT_OFFSET_DEG = -9.8
 
