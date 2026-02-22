@@ -14,11 +14,13 @@ except ImportError:
 # CONFIG
 # ------------------------------
 
+# Board position in the flat (warped) image.
+# If warp succeeds, these describe the board in the corrected frame.
+# If warp fails, these describe the board in the raw flipped image.
 BOARD_CX = 925
 BOARD_CY = 635
 BOARD_RADIUS = 393
 
-ANGLE_OFFSET_DEGREES = 0
 ROT_OFFSET_DEG = -9.8
 
 SECTORS = [
@@ -28,28 +30,31 @@ SECTORS = [
 
 CAMERA_UPSIDE_DOWN = True
 
-USE_WARP = False
-USE_ARUCO_WARP = True
+# Set to True once ArUco warp is confirmed working.
+# Set to False to use raw flipped image (current working state).
+USE_ARUCO_WARP = False
 
-DST_POINTS = np.float32([
-    [200,  150],   # id=0 top-left
-    [1720, 150],   # id=1 top-right
-    [200,  930],   # id=2 bottom-left
-    [1720, 930],   # id=3 bottom-right
+# Output frame size
+FRAME_W = 1920
+FRAME_H = 1080
+
+# ArUco warp destination: the 4 markers map to the full frame corners.
+# Order matches marker IDs: 0=top-left, 1=top-right, 2=bottom-left, 3=bottom-right
+ARUCO_DST = np.float32([
+    [0,        0       ],  # id=0 → top-left
+    [FRAME_W,  0       ],  # id=1 → top-right
+    [0,        FRAME_H ],  # id=2 → bottom-left
+    [FRAME_W,  FRAME_H ],  # id=3 → bottom-right
 ])
-
-DST_POINTS = np.float32([
-    [BOARD_CX,               BOARD_CY - BOARD_RADIUS],  # top
-    [BOARD_CX + BOARD_RADIUS, BOARD_CY],                # right
-    [BOARD_CX,               BOARD_CY + BOARD_RADIUS],  # bottom
-    [BOARD_CX - BOARD_RADIUS, BOARD_CY],                # left
-])
-
-WARP_MATRIX = None
 
 # detection tuning
 DIFF_THRESHOLD = 15
 MIN_BLOB_AREA = 10
+
+
+# ------------------------------
+# RING / SECTOR CLASSIFICATION
+# ------------------------------
 
 def ring_from_radius_frac(r_frac: float) -> str:
     if r_frac <= 0.035:
@@ -69,8 +74,8 @@ def ring_from_radius_frac(r_frac: float) -> str:
 def sector_index_from_angle(angle: float) -> int:
     rot_rad = math.radians(ROT_OFFSET_DEG)
     a = angle + math.pi / 2 - rot_rad
-    a = (a % (2*math.pi) + 2*math.pi) % (2*math.pi)
-    return int(math.floor(a / (2*math.pi) * 20)) % 20
+    a = (a % (2 * math.pi) + 2 * math.pi) % (2 * math.pi)
+    return int(math.floor(a / (2 * math.pi) * 20)) % 20
 
 def pixel_to_polar(x: float, y: float):
     dx = x - BOARD_CX
@@ -83,28 +88,28 @@ def classify_hit_with_debug(x: float, y: float):
     r_frac, angle = pixel_to_polar(x, y)
     angle_deg = math.degrees(angle) % 360
     ring = ring_from_radius_frac(r_frac)
-
-    if ring == "miss":
-        sector = None
-    else:
-        idx = sector_index_from_angle(angle)
-        sector = SECTORS[idx]
-
+    sector = None if ring == "miss" else SECTORS[sector_index_from_angle(angle)]
     print(f"[DEBUG] Tip at ({x:.1f},{y:.1f}) => angle {angle_deg:.1f}°, sector {sector}")
-    return {
-        "ring": ring,
-        "sector": sector,
-        "r_frac": r_frac,
-        "angle_deg": angle_deg
-    }
+    return {"ring": ring, "sector": sector, "r_frac": r_frac, "angle_deg": angle_deg}
 
 def classify_hit(x, y):
     info = classify_hit_with_debug(x, y)
     print(f"[HIT] Estimated sector={info['sector']}, type={info['ring']}")
     return info["ring"], info["sector"]
 
+
+# ------------------------------
+# ARUCO WARP
+# ------------------------------
+
 def _compute_warp_from_aruco(img):
-    if not HAS_ARUCO or not USE_ARUCO_WARP:
+    """
+    Detects 4 ArUco markers (IDs 0-3) and computes a perspective warp
+    that maps the surface defined by those markers into a flat full-frame rectangle.
+    Returns the warp matrix M, or None if detection fails.
+    """
+    if not HAS_ARUCO:
+        print("[ARUCO] cv2.aruco not available.")
         return None
 
     try:
@@ -117,28 +122,40 @@ def _compute_warp_from_aruco(img):
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     corners, ids, _ = detector.detectMarkers(gray)
-    
-    if ids is None or len(ids) < 4:
-        print(f"[ARUCO] Detection failed - found {0 if ids is None else len(ids)} markers, need 4. Falling back to DEFAULT_SRC_POINTS")
+
+    if ids is None:
+        print("[ARUCO] No markers detected. Using raw image.")
         return None
 
-    ids = ids.flatten()
+    ids_flat = ids.flatten()
     required = [0, 1, 2, 3]
-    if not all(r in ids for r in required):
-        print(f"[ARUCO] Missing required markers. Found: {ids}. Falling back to DEFAULT_SRC_POINTS")
+
+    if not all(r in ids_flat for r in required):
+        print(f"[ARUCO] Only found markers: {ids_flat}. Need all of [0,1,2,3]. Using raw image.")
         return None
 
+    # Build source points in marker ID order [0,1,2,3]
     src = []
     for mid in required:
-        idx = int(np.where(ids == mid)[0][0])
-        c = corners[idx][0].mean(axis=0)
-        src.append(c)
+        idx = int(np.where(ids_flat == mid)[0][0])
+        centre = corners[idx][0].mean(axis=0)
+        src.append(centre)
 
-    print(f"[ARUCO] All 4 markers found! Computing warp matrix.")
     src = np.float32(src)
-    return cv2.getPerspectiveTransform(src, DST_POINTS)
+    M = cv2.getPerspectiveTransform(src, ARUCO_DST)
+    print("[ARUCO] All 4 markers found. Warp matrix computed.")
+    return M
+
+
+# ------------------------------
+# IMAGE LOADING
+# ------------------------------
 
 def load_image(path: str):
+    """
+    Loads an image, flips it if camera is upside down, and optionally
+    applies ArUco-based perspective correction.
+    """
     img = cv2.imread(path)
     if img is None:
         raise RuntimeError(f"Failed to load {path}")
@@ -146,20 +163,19 @@ def load_image(path: str):
     if CAMERA_UPSIDE_DOWN:
         img = cv2.rotate(img, cv2.ROTATE_180)
 
-    if USE_WARP:
-        global WARP_MATRIX
-        h, w = img.shape[:2]
-
-        WARP_MATRIX = None
-        if WARP_MATRIX is None:
-            M = _compute_warp_from_aruco(img)
-            if M is None:
-                M = cv2.getPerspectiveTransform(DEFAULT_SRC_POINTS, DST_POINTS)
-            WARP_MATRIX = M
-
-        img = cv2.warpPerspective(img, WARP_MATRIX, (w, h))
+    if USE_ARUCO_WARP:
+        M = _compute_warp_from_aruco(img)
+        if M is not None:
+            img = cv2.warpPerspective(img, M, (FRAME_W, FRAME_H))
+        else:
+            print("[WARP] Falling back to raw flipped image.")
 
     return img
+
+
+# ------------------------------
+# DART DETECTION
+# ------------------------------
 
 def preprocess_for_diff(img):
     return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -174,7 +190,7 @@ def find_dart_center(before_img, after_img, debug_img=None):
     yy, xx = np.mgrid[0:h, 0:w]
     dx = xx - BOARD_CX
     dy = yy - BOARD_CY
-    r = np.sqrt(dx*dx + dy*dy)
+    r = np.sqrt(dx * dx + dy * dy)
     mask = (r <= BOARD_RADIUS * 1.1)
     diff = np.where(mask, diff, 0).astype(np.uint8)
 
@@ -194,14 +210,7 @@ def find_dart_center(before_img, after_img, debug_img=None):
         if area < MIN_BLOB_AREA:
             continue
         top = stats[lab, cv2.CC_STAT_TOP]
-
-        if best_label is None:
-            best_label = lab
-            best_top = top
-            best_area = area
-            continue
-
-        if top < best_top or (top == best_top and area > best_area):
+        if best_label is None or top < best_top or (top == best_top and area > best_area):
             best_label = lab
             best_top = top
             best_area = area
@@ -217,7 +226,7 @@ def find_dart_center(before_img, after_img, debug_img=None):
         cnts, _ = cv2.findContours(comp, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if cnts:
             c = max(cnts, key=cv2.contourArea)
-            cv2.drawContours(debug_img, [c], -1, (0,255,0), 2)
+            cv2.drawContours(debug_img, [c], -1, (0, 255, 0), 2)
 
     ys, xs = np.where(comp > 0)
     if len(xs) == 0:
@@ -229,187 +238,125 @@ def find_dart_center(before_img, after_img, debug_img=None):
     tip = (float(xs[i]), float(ys[i]))
 
     if debug_img is not None:
-        cv2.circle(debug_img, (int(tip[0]), int(tip[1])), 4, (0,0,255), -1)
+        cv2.circle(debug_img, (int(tip[0]), int(tip[1])), 4, (0, 0, 255), -1)
 
     return tip, comp
 
 
-def draw_debug_overlay(input_path: str, output_path: str):
-    img = load_image(input_path)
-    overlay = img.copy()
+# ------------------------------
+# DEBUG OVERLAY DRAWING
+# ------------------------------
 
+def _draw_overlay(img):
+    """Draws board rings and sector lines onto img in-place."""
     center = (int(BOARD_CX), int(BOARD_CY))
 
-    cv2.circle(overlay, center, int(BOARD_RADIUS), (0,0,255), 2)
+    # Outer ring
+    cv2.circle(img, center, int(BOARD_RADIUS), (0, 0, 255), 2)
 
-    ring_fracs = [0.035, 0.09, 0.57, 0.63, 0.95]
-    for frac in ring_fracs:
-        r = int(BOARD_RADIUS * frac)
-        cv2.circle(overlay, center, r, (0,255,0), 1)
+    # Inner rings
+    for frac in [0.035, 0.09, 0.57, 0.63, 0.95]:
+        cv2.circle(img, center, int(BOARD_RADIUS * frac), (0, 255, 0), 1)
 
+    # Sector lines with labels
     rot_rad = math.radians(ROT_OFFSET_DEG)
-    two_pi = 2*math.pi
     for k in range(20):
-        angle = -math.pi/2 + rot_rad + k*(two_pi/20)
+        angle = -math.pi / 2 + rot_rad + k * (2 * math.pi / 20)
         x2 = int(BOARD_CX + BOARD_RADIUS * math.cos(angle))
         y2 = int(BOARD_CY + BOARD_RADIUS * math.sin(angle))
-        cv2.line(overlay, center, (x2, y2), (255,0,0), 1)
+        cv2.line(img, center, (x2, y2), (255, 0, 0), 1)
 
-    cv2.circle(overlay, center, 3, (255,255,255), -1)
+        lx = int(BOARD_CX + BOARD_RADIUS * 1.05 * math.cos(angle))
+        ly = int(BOARD_CY + BOARD_RADIUS * 1.05 * math.sin(angle))
+        cv2.putText(img, str(SECTORS[k]), (lx, ly),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1, cv2.LINE_AA)
 
-    cv2.imwrite(output_path, overlay)
+    cv2.circle(img, center, 3, (255, 255, 255), -1)
 
+def draw_debug_overlay(input_path: str, output_path: str):
+    img = load_image(input_path)
+    _draw_overlay(img)
+    cv2.imwrite(output_path, img)
 
 def draw_debug_overlay_with_hit(input_path: str, hit_xy, output_path: str):
     img = load_image(input_path)
-    overlay = img.copy()
-
-    center = (int(BOARD_CX), int(BOARD_CY))
-
-    cv2.circle(overlay, center, int(BOARD_RADIUS), (0,0,255), 2)
-
-    ring_fracs = [0.035, 0.09, 0.57, 0.63, 0.95]
-    for frac in ring_fracs:
-        r = int(BOARD_RADIUS * frac)
-        cv2.circle(overlay, center, r, (0,255,0), 1)
-
-    cv2.circle(overlay, center, int(BOARD_RADIUS * 0.035), (0,255,255), 2)
-    cv2.circle(overlay, center, int(BOARD_RADIUS * 0.09), (0,128,255), 1)
-
-    rot_rad = math.radians(ROT_OFFSET_DEG)
-    two_pi = 2*math.pi
-    for k in range(20):
-        angle = -math.pi/2 + rot_rad + k*(two_pi/20)
-        x2 = int(BOARD_CX + BOARD_RADIUS * math.cos(angle))
-        y2 = int(BOARD_CY + BOARD_RADIUS * math.sin(angle))
-        cv2.line(overlay, center, (x2, y2), (255,0,0), 1)
-
-        label_r = int(BOARD_RADIUS * 1.05)
-        lx = int(BOARD_CX + label_r * math.cos(angle))
-        ly = int(BOARD_CY + label_r * math.sin(angle))
-        cv2.putText(overlay, str(SECTORS[k]), (lx, ly),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255,255,0), 1, cv2.LINE_AA)
-
-    cv2.circle(overlay, center, 3, (255,255,255), -1)
+    _draw_overlay(img)
 
     if hit_xy is not None:
-        hx, hy = hit_xy
-        pt = (int(hx), int(hy))
-        cv2.circle(overlay, pt, 12, (255,255,255), 2)
-        cv2.circle(overlay, pt, 10, (0,0,255), -1)
-        cv2.circle(overlay, pt, 2, (0,0,0), -1)
+        pt = (int(hit_xy[0]), int(hit_xy[1]))
+        cv2.circle(img, pt, 12, (255, 255, 255), 2)
+        cv2.circle(img, pt, 10, (0, 0, 255), -1)
+        cv2.circle(img, pt, 2, (0, 0, 0), -1)
 
-    cv2.imwrite(output_path, overlay)
+    cv2.imwrite(output_path, img)
+
+
+# ------------------------------
+# MAIN
+# ------------------------------
 
 def main():
-    # ---------------------------
+
     # MODE: overlay
-    # ---------------------------
     if len(sys.argv) >= 2 and sys.argv[1] == "overlay":
         if len(sys.argv) != 4:
             print("Usage: python3 detect_dart.py overlay INPUT.jpg OUTPUT.jpg")
             sys.exit(1)
-
-        input_path = sys.argv[2]
-        out_path = sys.argv[3]
-        draw_debug_overlay(input_path, out_path)
-        print(f"Overlay written to {out_path}")
+        draw_debug_overlay(sys.argv[2], sys.argv[3])
+        print(f"Overlay written to {sys.argv[3]}")
         sys.exit(0)
 
-    # ---------------------------
     # MODE: overlayhit
-    # ---------------------------
     if len(sys.argv) >= 2 and sys.argv[1] == "overlayhit":
         if len(sys.argv) != 5:
             print("Usage: python3 detect_dart.py overlayhit BEFORE.jpg AFTER.jpg OUTPUT.jpg")
             sys.exit(1)
-
         import datetime
-        before_path = sys.argv[2]
-        after_path = sys.argv[3]
-        out_path = sys.argv[4]
-
-        # ALL IMAGES WARPED ONCE HERE
-        before = load_image(before_path)
-        after = load_image(after_path)
-        overlay = load_image(after_path)
-
-        # Images already rotated + warped
-        h, w = before.shape[:2]
-
-        # Compute hit
-        hit_point, edges = find_dart_center(before, after, overlay)
-        print(f"DEBUG: Estimated tip @ {hit_point}")
-
-        # Draw overlay
-        after_img = after.copy()
-        center = (int(BOARD_CX), int(BOARD_CY))
-
-        if hit_point is not None:
-            tx, ty = int(hit_point[0]), int(hit_point[1])
-            cv2.circle(after_img, (tx, ty), 8, (0,0,255), 2)
-
-        # Draw sector lines
-        SECTOR_ANGLE = 18
-        for i in range(20):
-            ang = math.radians(i * SECTOR_ANGLE)
-            x2 = int(center[0] + 1000 * math.cos(ang))
-            y2 = int(center[1] - 1000 * math.sin(ang))
-            cv2.line(after_img, center, (x2, y2), (255,0,0), 1)
-
-        timestamp = datetime.datetime.now().strftime("%H%M%S")
-        out_name = f"overlay_debug_{timestamp}.jpg"
-        cv2.imwrite(out_name, after_img)
-        print(f"Overlay+hit written to {out_name}")
+        before = load_image(sys.argv[2])
+        after = load_image(sys.argv[3])
+        debug = after.copy()
+        hit_point, _ = find_dart_center(before, after, debug)
+        print(f"[DEBUG] Estimated tip @ {hit_point}")
+        draw_debug_overlay_with_hit(sys.argv[3], hit_point, sys.argv[4])
+        print(f"Overlay+hit written to {sys.argv[4]}")
         sys.exit(0)
 
-    # ---------------------------
-    # MODE: aruco
-    # ---------------------------
+    # MODE: aruco (diagnostic - shows which markers are detected)
     if len(sys.argv) >= 2 and sys.argv[1] == "aruco":
         if len(sys.argv) != 4:
-            print("Usage: python3 detect_dart.py aruco BEFORE.jpg OUTPUT.jpg")
+            print("Usage: python3 detect_dart.py aruco INPUT.jpg OUTPUT.jpg")
             sys.exit(1)
-
-        before_path = sys.argv[2]
-        out_path = sys.argv[3]
-        before = load_image(before_path)
-
-        # Show ArUco markers
+        img = load_image(sys.argv[2])
         try:
-            aruco_dict = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
+            dictionary = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
             params = aruco.DetectorParameters()
-            gray = cv2.cvtColor(before, cv2.COLOR_BGR2GRAY)
-            detector = aruco.ArucoDetector(aruco_dict, params)
+            detector = aruco.ArucoDetector(dictionary, params)
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             corners, ids, _ = detector.detectMarkers(gray)
-
             if ids is not None:
-                aruco.drawDetectedMarkers(before, corners, ids)
+                aruco.drawDetectedMarkers(img, corners, ids)
                 print(f"[ARUCO] Found markers: {ids.flatten()}")
             else:
                 print("[ARUCO] No markers detected.")
         except Exception as e:
-            print(f"[ARUCO] error: {e}")
-
-        cv2.imwrite(out_path, before)
-        print(f"Saved ArUco debug to {out_path}")
+            print(f"[ARUCO] Error: {e}")
+        cv2.imwrite(sys.argv[3], img)
+        print(f"Saved ArUco debug to {sys.argv[3]}")
         sys.exit(0)
 
-    # ---------------------------
     # Default: detect impact
-    # ---------------------------
     if len(sys.argv) != 3:
         print("Usage:")
         print("  python3 detect_dart.py BEFORE.jpg AFTER.jpg")
         print("  python3 detect_dart.py overlay INPUT.jpg OUTPUT.jpg")
         print("  python3 detect_dart.py overlayhit BEFORE.jpg AFTER.jpg OUTPUT.jpg")
-        print("  python3 detect_dart.py aruco BEFORE.jpg OUTPUT.jpg")
+        print("  python3 detect_dart.py aruco INPUT.jpg OUTPUT.jpg")
         sys.exit(1)
 
     before = load_image(sys.argv[1])
     after = load_image(sys.argv[2])
-
     tip, _ = find_dart_center(before, after)
+
     if tip is None:
         print("No clear dart impact detected.")
         sys.exit(0)
@@ -423,58 +370,32 @@ def main():
         print(f"Detected impact: {ring} {sector} at ({cx:.1f},{cy:.1f})")
 
 
+# ------------------------------
+# APP HELPERS
+# ------------------------------
+
 def detect_impact(before_img, after_img):
-    """
-    High-level helper used by the app when the camera is live.
-    Option A: images already rotated + warped in load_image().
-    """
+    """Called by app.py when camera is live."""
     tip, _ = find_dart_center(before_img, after_img)
     if tip is None:
         return {"hit": None, "reason": "no_impact"}
-
     x, y = tip
     info = classify_hit_with_debug(x, y)
     info["x"] = x
     info["y"] = y
-
     if info["ring"] == "miss" or info["sector"] is None:
         return {"hit": None, "reason": "off_board"}
-
     return {"hit": info, "reason": None}
 
-
 def estimate_tip(before_img, after_img, debug_img=None):
-    """
-    Same logic as find_dart_center, consistent with Option A warp pipeline.
-    """
+    """Returns estimated dart tip position."""
     tip, _ = find_dart_center(before_img, after_img, debug_img)
     if tip is None:
         print("[ERROR] No dart pixels found.")
         return None
-
     print(f"[DEBUG] Tip estimate: ({tip[0]:.1f}, {tip[1]:.1f})")
     return tip
 
 
 if __name__ == "__main__":
     main()
-
-
-# ------------------------------------------
-# Utility for external callers (legacy use)
-# ------------------------------------------
-def get_board_sector_and_ring(x, y, board_center=(960,540)):
-    dx = x - board_center[0]
-    dy = y - board_center[1]
-    r = math.hypot(dx, dy)
-    r_frac = r / max(1.0, BOARD_RADIUS)
-
-    angle = (math.degrees(math.atan2(dy, dx)) + ANGLE_OFFSET_DEGREES + 360) % 360
-    SECTOR_ANGLE = 18
-
-    ring = ring_from_radius_frac(r_frac)
-    if ring == "miss":
-        return None, ring
-
-    sector_index = int((angle - 5) % 360 // SECTOR_ANGLE)
-    return SECTORS[sector_index], ring
