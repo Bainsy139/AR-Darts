@@ -109,7 +109,7 @@ def _compute_warp_from_aruco(img):
 
     try:
         dictionary = aruco.getPredefinedDictionary(aruco.DICT_4X4_50)
-        params = aruco.DetectorParameters_create()
+        params = aruco.DetectorParameters()
     except:
         return None
 
