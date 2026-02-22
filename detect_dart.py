@@ -150,6 +150,7 @@ def load_image(path: str):
         global WARP_MATRIX
         h, w = img.shape[:2]
 
+        WARP_MATRIX = None
         if WARP_MATRIX is None:
             M = _compute_warp_from_aruco(img)
             if M is None:
