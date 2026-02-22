@@ -32,10 +32,10 @@ USE_WARP = True
 USE_ARUCO_WARP = True
 
 DST_POINTS = np.float32([
-    [200,  150],   # top-left corner
-    [1720, 150],   # top-right corner
-    [1720, 930],   # bottom-right corner
-    [200,  930],   # bottom-left corner
+    [200,  150],   # id=0 top-left
+    [1720, 150],   # id=1 top-right
+    [200,  930],   # id=2 bottom-left
+    [1720, 930],   # id=3 bottom-right
 ])
 
 DST_POINTS = np.float32([
