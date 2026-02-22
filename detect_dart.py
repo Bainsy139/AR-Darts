@@ -180,6 +180,8 @@ def load_image(path: str):
 def preprocess_for_diff(img):
     return cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
+DART_LENGTH_PX = 140
+
 def find_dart_center(before_img, after_img, debug_img=None):
     g_before = preprocess_for_diff(before_img)
     g_after = preprocess_for_diff(after_img)
@@ -222,26 +224,44 @@ def find_dart_center(before_img, after_img, debug_img=None):
 
     comp = (labels == best_label).astype(np.uint8) * 255
 
+    # Get all blob pixels
+    ys, xs = np.where(comp > 0)
+    if len(xs) == 0:
+        return None, comp
+
+    # PCA to find principal axis of the dart blob
+    pts = np.column_stack([xs, ys]).astype(np.float32)
+    mean, eigenvectors = cv2.PCACompute(pts, mean=None)
+    axis = eigenvectors[0]  # principal axis direction (unit vector)
+
+    # Flight end = topmost pixel (lowest Y value)
+    i_flight = np.argmin(ys)
+    flight = np.array([float(xs[i_flight]), float(ys[i_flight])])
+
+    # Project all blob pixels onto the axis from the flight point
+    projections = (pts - flight) @ axis
+    max_proj = projections.max()
+
+    # Travel DART_LENGTH_PX along axis from flight, capped at blob extent
+    travel = min(DART_LENGTH_PX, max_proj)
+    tip = flight + axis * travel
+
+    # Make sure we're travelling away from flight (positive direction)
+    # If axis points upward (negative Y), flip it
+    if axis[1] < 0:
+        tip = flight - axis * travel
+
+    tip = (float(tip[0]), float(tip[1]))
+
     if debug_img is not None:
         cnts, _ = cv2.findContours(comp, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if cnts:
             c = max(cnts, key=cv2.contourArea)
             cv2.drawContours(debug_img, [c], -1, (0, 255, 0), 2)
-
-    ys, xs = np.where(comp > 0)
-    if len(xs) == 0:
-        if debug_img is not None:
-            cv2.imwrite("debug_last_blob.jpg", debug_img)
-        return None, comp
-
-    i = np.argmin(ys)
-    tip = (float(xs[i]), float(ys[i]))
-
-    if debug_img is not None:
+        cv2.circle(debug_img, (int(flight[0]), int(flight[1])), 4, (255, 165, 0), -1)
         cv2.circle(debug_img, (int(tip[0]), int(tip[1])), 4, (0, 0, 255), -1)
 
     return tip, comp
-
 
 # ------------------------------
 # DEBUG OVERLAY DRAWING
