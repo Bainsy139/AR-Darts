@@ -32,7 +32,7 @@ CAMERA_UPSIDE_DOWN = True
 
 # Set to True once ArUco warp is confirmed working.
 # Set to False to use raw flipped image (current working state).
-USE_ARUCO_WARP = False
+USE_ARUCO_WARP = True
 
 # Output frame size
 FRAME_W = 1920
