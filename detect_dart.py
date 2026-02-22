@@ -14,9 +14,9 @@ except ImportError:
 # CONFIG
 # ------------------------------
 
-BOARD_CX = 930
-BOARD_CY = 625
-BOARD_RADIUS = 130
+BOARD_CX = 925
+BOARD_CY = 635
+BOARD_RADIUS = 393
 
 ANGLE_OFFSET_DEGREES = 0
 ROT_OFFSET_DEG = -9.8
@@ -31,11 +31,11 @@ CAMERA_UPSIDE_DOWN = True
 USE_WARP = True
 USE_ARUCO_WARP = True
 
-DEFAULT_SRC_POINTS = np.float32([
-    [1842, 631],  # id=0 top-left (after flip)
-    [213,  762],  # id=1 top-right (after flip)
-    [1623, 205],  # id=2 bottom-left (after flip)
-    [352,  301],  # id=3 bottom-right (after flip)
+DST_POINTS = np.float32([
+    [200,  150],   # top-left corner
+    [1720, 150],   # top-right corner
+    [1720, 930],   # bottom-right corner
+    [200,  930],   # bottom-left corner
 ])
 
 DST_POINTS = np.float32([
