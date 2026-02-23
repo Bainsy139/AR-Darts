@@ -139,7 +139,7 @@ let CENTER_X_FUDGE = 0;
 let CENTER_Y_FUDGE = 0;
 
 // Sector math / hit detection rotation
-let ROT_OFFSET_DEG = 2;
+let ROT_OFFSET_DEG = -7.25;
 
 // Visual-only board image transform
 let BOARD_IMG_ROT_DEG = 0;
@@ -171,6 +171,8 @@ const RATIOS = {
   bullOuter: 0.09,
   bullInner: 0.035,
 };
+// Note: RATIOS are used for visual guides only.
+// ringFromRadiusFrac() below uses these same values for hit classification.
 
 const container = document.getElementById("board-container");
 const overlay = document.getElementById("overlay");
@@ -343,12 +345,14 @@ function drawFade() {
 }
 
 function ringFromRadiusFrac(r) {
-  if (r <= 0.05) return "inner_bull";
-  if (r <= 0.12) return "outer_bull";
-  if (r >= 0.94 && r <= 1.0) return "double";
-  if (r >= 0.57 && r <= 0.65) return "treble";
-  if (r > 1.0) return "miss";
-  return "single";
+  // Boundaries match detect_dart.py exactly
+  if (r <= 0.035) return "inner_bull";
+  if (r <= 0.09)  return "outer_bull";
+  if (r < 0.57)   return "single";
+  if (r <= 0.63)  return "treble";
+  if (r < 0.95)   return "single";
+  if (r <= 1.0)   return "double";
+  return "miss";
 }
 
 function sectorIndexFromAngle(a) {
