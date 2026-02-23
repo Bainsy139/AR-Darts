@@ -23,7 +23,7 @@ import sys # Import sys for graceful exit
 # ----------------------------
 # Configuration (tuned values)
 # ----------------------------
-AUDIO_DEVICE_INDEX = 2   # None = default input (USB mic already set as capture)
+AUDIO_DEVICE_INDEX = 0   # None = default input (USB mic already set as capture)
 SAMPLE_RATE = 44100
 CHUNK = 1024                # frames per buffer
 RMS_THRESHOLD = 0.1       # trigger threshold
