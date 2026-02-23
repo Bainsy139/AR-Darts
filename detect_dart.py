@@ -245,10 +245,19 @@ def find_dart_center(before_img, after_img, debug_img=None):
             cv2.imwrite("debug_last_blob.jpg", debug_img)
         return None, comp
 
-    # Tip = bottommost pixel (highest Y value)
-    # Camera is above board so tip always appears lowest on screen
-    i = np.argmax(ys)
-    tip = (float(xs[i]), float(ys[i]))
+    # Filter to only pixels inside the board
+    inside = np.sqrt((xs - BOARD_CX)**2 + (ys - BOARD_CY)**2) <= BOARD_RADIUS
+    ys_in = ys[inside]
+    xs_in = xs[inside]
+
+    if len(xs_in) == 0:
+        # Fallback to full blob if nothing inside board
+        i = np.argmax(ys)
+        tip = (float(xs[i]), float(ys[i]))
+    else:
+        # Tip = bottommost pixel inside the board
+        i = np.argmax(ys_in)
+        tip = (float(xs_in[i]), float(ys_in[i]))
 
     if debug_img is not None:
         cv2.circle(debug_img, (int(tip[0]), int(tip[1])), 4, (0, 0, 255), -1)
