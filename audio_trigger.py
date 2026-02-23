@@ -26,8 +26,8 @@ import sys
 AUDIO_DEVICE_INDEX = 0      # PyAudio index for USB PnP Sound Device
 SAMPLE_RATE = 44100
 CHUNK = 1024                # frames per buffer
-RMS_THRESHOLD = 0.03         # trigger threshold
-COOLDOWN_SEC = 0.4          # minimum time between triggers
+RMS_THRESHOLD = 0.05         # trigger threshold
+COOLDOWN_SEC = 2.0          # minimum time between triggers
 SETTLE_SEC = 0.30           # wait after impact before detection (dart vibration settle)
 RETRY_ON_NO_IMPACT = True   # one retry if vision says "no_impact"
 RETRY_DELAY_SEC = 0.20      # extra wait before retry
