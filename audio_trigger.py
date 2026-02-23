@@ -31,7 +31,7 @@ COOLDOWN_SEC = 2.0          # minimum time between triggers
 SETTLE_SEC = 0.30           # wait after impact before detection (dart vibration settle)
 RETRY_ON_NO_IMPACT = True   # one retry if vision says "no_impact"
 RETRY_DELAY_SEC = 0.20      # extra wait before retry
-DEBUG_RMS = True            # set True to print live RMS (set False once threshold is dialled in)
+DEBUG_RMS = False            # set True to print live RMS (set False once threshold is dialled in)
 SERVER_BASE = "http://127.0.0.1:5050"
 
 CAPTURE_BEFORE_ENDPOINT = f"{SERVER_BASE}/capture-before"
