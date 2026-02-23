@@ -10,6 +10,9 @@ app = Flask(__name__)
 BEFORE_PATH = "before.jpg"
 AFTER_PATH = "after.jpg"
 
+# Latest detection result — written by /detect, consumed by /latest-hit
+_latest_hit = None
+
 
 @app.route('/')
 def index():
@@ -157,15 +160,31 @@ def detect():
     else:
         hit_type = ring  # "single", "double", "treble"
 
+    hit_payload = {
+        "type": hit_type,
+        "sector": sector,
+        "x": cx,
+        "y": cy,
+    }
+
+    # Store for JS polling via /latest-hit
+    global _latest_hit
+    _latest_hit = hit_payload
+
     return jsonify({
         "ok": True,
-        "hit": {
-            "type": hit_type,
-            "sector": sector,
-            "x": cx,
-            "y": cy,
-        }
+        "hit": hit_payload,
     })
+
+
+@app.get('/latest-hit')
+def latest_hit():
+    """Return the most recent detection result and clear it.
+    JS polls this endpoint to pick up hits triggered by the audio system."""
+    global _latest_hit
+    hit = _latest_hit
+    _latest_hit = None
+    return jsonify({"ok": True, "hit": hit})
 
 
 if __name__ == '__main__':

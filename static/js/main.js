@@ -139,7 +139,7 @@ let CENTER_X_FUDGE = 0;
 let CENTER_Y_FUDGE = 0;
 
 // Sector math / hit detection rotation
-let ROT_OFFSET_DEG = -7.25;
+let ROT_OFFSET_DEG = 2;
 
 // Visual-only board image transform
 let BOARD_IMG_ROT_DEG = 0;
@@ -171,8 +171,6 @@ const RATIOS = {
   bullOuter: 0.09,
   bullInner: 0.035,
 };
-// Note: RATIOS are used for visual guides only.
-// ringFromRadiusFrac() below uses these same values for hit classification.
 
 const container = document.getElementById("board-container");
 const overlay = document.getElementById("overlay");
@@ -345,14 +343,12 @@ function drawFade() {
 }
 
 function ringFromRadiusFrac(r) {
-  // Boundaries match detect_dart.py exactly
-  if (r <= 0.035) return "inner_bull";
-  if (r <= 0.09)  return "outer_bull";
-  if (r < 0.57)   return "single";
-  if (r <= 0.63)  return "treble";
-  if (r < 0.95)   return "single";
-  if (r <= 1.0)   return "double";
-  return "miss";
+  if (r <= 0.05) return "inner_bull";
+  if (r <= 0.12) return "outer_bull";
+  if (r >= 0.94 && r <= 1.0) return "double";
+  if (r >= 0.57 && r <= 0.65) return "treble";
+  if (r > 1.0) return "miss";
+  return "single";
 }
 
 function sectorIndexFromAngle(a) {
@@ -1395,3 +1391,52 @@ board.addEventListener("load", resizeOverlay);
 overlay.addEventListener("click", handleClick);
 
 // --- Legacy setLastHitText function fully removed ---
+
+// -------------------------------------------------------------------------------------------------
+// AUDIO TRIGGER POLLING
+// Polls /latest-hit every second to pick up hits fired by audio_trigger.py
+// -------------------------------------------------------------------------------------------------
+let _pollInterval = null;
+
+function startPolling() {
+  if (_pollInterval) return;
+  _pollInterval = setInterval(async () => {
+    if (!game.active) return;
+    try {
+      const res = await fetch("/latest-hit");
+      const data = await res.json();
+      if (!data.ok || !data.hit) return;
+
+      const { ring, sector } = normaliseDetectionHit(data.hit);
+
+      unmuteSfx();
+      ensureAudio();
+
+      const label = ring.includes("bull")
+        ? ring.replace("_", " ")
+        : `${ring} ${sector}`;
+
+      if (statusEl) statusEl.textContent = `Detected: ${label}`;
+
+      const throwingPlayer = game.turn;
+      recordLastHit(label);
+      updateLastHitUI(throwingPlayer, label);
+
+      if (ring === "miss") {
+        game.players[throwingPlayer].turnThrows.push("miss");
+      } else {
+        game.players[throwingPlayer].turnThrows.push("hit");
+        applyHit(ring, sector);
+        updateTargetUI(throwingPlayer);
+      }
+      updateThrowsUI(throwingPlayer);
+      renderPlayers();
+    } catch (_) {
+      // silently ignore poll errors
+    }
+  }, 1000);
+}
+
+window.addEventListener("DOMContentLoaded", () => {
+  startPolling();
+});
