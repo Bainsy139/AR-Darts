@@ -252,12 +252,14 @@ def find_dart_center(before_img, after_img, debug_img=None):
 
     if len(xs_in) == 0:
         # Fallback to full blob if nothing inside board
-        i = np.argmin(ys)
-        tip = (float(xs[i]), float(ys[i]))
+        top_y = float(ys.min())
+        band = (ys <= top_y + 10)
+        tip = (float(np.mean(xs[band])), float(np.mean(ys[band])))
     else:
-        # Tip = Topmost pixel inside the board
-        i = np.argmin(ys_in)
-        tip = (float(xs_in[i]), float(ys_in[i]))
+        # Tip = average of topmost pixels inside the board (more stable than single pixel)
+        top_y = float(ys_in.min())
+        band = (ys_in <= top_y + 10)
+        tip = (float(np.mean(xs_in[band])), float(np.mean(ys_in[band])))
 
     if debug_img is not None:
         cv2.circle(debug_img, (int(tip[0]), int(tip[1])), 4, (0, 0, 255), -1)
