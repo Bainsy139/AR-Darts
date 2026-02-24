@@ -252,11 +252,11 @@ def find_dart_center(before_img, after_img, debug_img=None):
 
     if len(xs_in) == 0:
         # Fallback to full blob if nothing inside board
-        i = np.argmax(ys)
+        i = np.argmin(ys)
         tip = (float(xs[i]), float(ys[i]))
     else:
-        # Tip = bottommost pixel inside the board
-        i = np.argmax(ys_in)
+        # Tip = Topmost pixel inside the board
+        i = np.argmin(ys_in)
         tip = (float(xs_in[i]), float(ys_in[i]))
 
     if debug_img is not None:
