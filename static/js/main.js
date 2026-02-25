@@ -585,6 +585,11 @@ async function logToServer(payload) {
 // -------------------------------------------------------------------------------------------------
 // Camera endpoints and detection helpers
 // -------------------------------------------------------------------------------------------------
+
+// Flag: true while detectDartFromCamera() is in flight.
+// Poller skips when this is set so the same hit is never scored twice.
+let _manualDetecting = false;
+
 async function captureBoardBefore() {
   try {
     const res = await fetch("/capture-before", { method: "POST" });
@@ -615,12 +620,15 @@ function normaliseDetectionHit(hit) {
 }
 
 async function detectDartFromCamera() {
+  _manualDetecting = true;
   try {
     const res = await fetch("/detect", { method: "POST" });
     const data = await res.json();
     if (!data.ok) {
       throw new Error("detect endpoint returned !ok");
     }
+    // Drain _latest_hit so the poller doesn't re-process this same detection
+    fetch("/latest-hit").catch(() => {});
     if (!data.hit) {
       if (statusEl) statusEl.textContent = "No impact detected.";
       const throwingPlayer = game.turn;
@@ -678,6 +686,8 @@ async function detectDartFromCamera() {
     if (statusEl) {
       statusEl.textContent = "Detect failed – check Pi logs.";
     }
+  } finally {
+    _manualDetecting = false;
   }
 }
 
@@ -1248,7 +1258,7 @@ function startPolling() {
     _pollInterval = null;
   }
   _pollInterval = setInterval(async () => {
-    if (!game.active) return;
+    if (!game.active || _manualDetecting) return;
     try {
       const res = await fetch("/latest-hit");
       const data = await res.json();
