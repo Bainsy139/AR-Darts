@@ -814,7 +814,8 @@ class GameEngine {
         }
       }
     } catch (_) {}
-
+    // Clear baseline so next player's first dart diffs against a clean board
+    fetch("/reset-baseline", { method: "POST" }).catch(() => {});
     console.info("[Engine] nextPlayer", { turn: this.g.turn });
   }
   pushSnapshot() {

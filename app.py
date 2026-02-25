@@ -186,6 +186,18 @@ def latest_hit():
     _latest_hit = None
     return jsonify({"ok": True, "hit": hit})
 
+@app.post('/reset-baseline')
+def reset_baseline():
+    """Delete before.jpg so next detection captures a clean baseline."""
+    try:
+        if os.path.exists(BEFORE_PATH):
+            os.remove(BEFORE_PATH)
+        print("[RESET] Baseline cleared for player change.")
+        return jsonify({"ok": True})
+    except Exception as e:
+        print(f"[ERROR] reset-baseline failed: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=5050, debug=True, use_reloader=False)

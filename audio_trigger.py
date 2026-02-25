@@ -41,8 +41,7 @@ DETECT_ENDPOINT = f"{SERVER_BASE}/detect"
 # Internal state
 # ----------------------------
 last_trigger_time = 0.0
-busy_handling_spike = False
-spike_lock = threading.Lock()
+_busy = threading.Event()  # replaces busy_handling_spike + spike_lock
 
 # ----------------------------
 # Helpers
@@ -76,62 +75,37 @@ def post(endpoint: str):
         return False, None
 
 def _handle_spike_blocking_actions():
-    """
-    Runs in a background thread to avoid blocking audio acquisition.
-    Settles, detects, retries if needed, then refreshes baseline.
-    """
-    global busy_handling_spike
-    with spike_lock:
-        if busy_handling_spike:
-            return
-        busy_handling_spike = True
-
     print("[SPIKE] Dart impact detected (processing in background)...")
-
     try:
-        # Let the dart settle before capturing the after frame
         time.sleep(SETTLE_SEC)
-
         ok, data = post(DETECT_ENDPOINT)
 
-        # Retry once if vision reports no_impact
         if RETRY_ON_NO_IMPACT and ok and isinstance(data, dict):
-            reason = None
-            try:
-                reason = data.get("reason") or (data.get("hit") or {}).get("reason")
-            except Exception:
-                reason = None
-
+            reason = data.get("reason") or (data.get("hit") or {}).get("reason")
             if reason == "no_impact":
-                print("[SPIKE] No impact detected by vision, retrying after delay...")
+                print("[SPIKE] No impact detected by vision, retrying...")
                 time.sleep(RETRY_DELAY_SEC)
                 post(DETECT_ENDPOINT)
 
-        # Refresh baseline for the next dart
         print("[SPIKE] Refreshing baseline for next dart...")
         post(CAPTURE_BEFORE_ENDPOINT)
 
     except Exception as e:
-        print(f"[ERROR] Error during spike handling: {e}")
+        print(f"[ERROR] Spike handling error: {e}")
     finally:
-        with spike_lock:
-            busy_handling_spike = False
+        _busy.clear()  # always release, even on error
         print("[SPIKE] Spike handling complete.")
 
 
 def handle_spike_non_blocking():
-    """Called from audio loop — fires spike handler in background thread."""
     global last_trigger_time
     now = time.time()
     if (now - last_trigger_time) < COOLDOWN_SEC:
         return
-
-    with spike_lock:
-        if busy_handling_spike:
-            return
-
+    if _busy.is_set():
+        return
+    _busy.set()  # set immediately — no second check needed
     last_trigger_time = now
-
     spike_thread = threading.Thread(target=_handle_spike_blocking_actions)
     spike_thread.daemon = True
     spike_thread.start()
