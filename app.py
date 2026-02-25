@@ -31,7 +31,7 @@ def get_camera():
             main={"size": (1920, 1080), "format": "BGR888"},
             controls={
                 "ExposureTime": 32680,
-                "AnalogueGain": 6.0,
+                "AnalogueGain": 16.0,
                 "AwbEnable": False,
                 "ColourGains": (1.5, 1.5),
             }

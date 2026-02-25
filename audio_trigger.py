@@ -62,7 +62,7 @@ def rms_from_bytes(data: bytes) -> float:
 def post(endpoint: str):
     """POST helper with basic error handling. Returns (ok, json_data_or_none)."""
     try:
-        r = requests.post(endpoint, timeout=5)
+        r = requests.post(endpoint, timeout=15)
         if r.status_code != 200:
             print(f"[WARN] {endpoint} -> HTTP {r.status_code}")
             return False, None
