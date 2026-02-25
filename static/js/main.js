@@ -104,7 +104,7 @@ const TARGETS = [
 // GAME STATE (plain object so HUD code can keep working unchanged)
 // ---------------------------------------------------------------------------------
 let game = {
-  mode: BOOT_MODE, // 'around' or 'x01'
+  mode: BOOT_MODE,
   x01Start: BOOT_X01_START,
   doubleOut: BOOT_DOUBLE_OUT,
   players: [
@@ -113,8 +113,8 @@ let game = {
       idx: 0,
       score: BOOT_X01_START,
       done: false,
-      lastHit: null, // ← persists until THIS player throws again
-      turnThrows: [], // "hit" | "miss" for the CURRENT turn
+      lastHit: null,
+      turnThrows: [],
     },
     {
       name: "Player 2",
@@ -127,8 +127,8 @@ let game = {
   ],
   turn: 0,
   throwsLeft: 3,
-  turnStartScore: BOOT_X01_START, // x01 snapshot at start of turn
-  history: [], // for Undo
+  turnStartScore: BOOT_X01_START,
+  history: [],
   active: false,
   winner: null,
 };
@@ -146,8 +146,10 @@ let BOARD_IMG_ROT_DEG = 0;
 let BOARD_IMG_SCALE = 1.0;
 let BOARD_IMG_X = 0;
 let BOARD_IMG_Y = 0;
+
 // Initial visibility of guides / panel from storage
 let SHOW_CAL_PANEL = loadCalUi();
+
 // Apply any saved calibration
 (function applySavedCal() {
   const s = getSavedCal();
@@ -162,7 +164,7 @@ let SHOW_CAL_PANEL = loadCalUi();
 })();
 
 // --- Visual guides toggle & ring ratios ---
-let SHOW_GUIDES = true; // controlled by checkbox in UI
+let SHOW_GUIDES = true;
 const RATIOS = {
   outer: 1.0,
   doubleInner: 0.95,
@@ -176,8 +178,9 @@ const container = document.getElementById("board-container");
 const overlay = document.getElementById("overlay");
 const board = document.getElementById("dartboard");
 const statusEl = document.getElementById("status");
+
 // ---------------------------------------------------------
-// Board image rotation (now decoupled from ROT_OFFSET_DEG)
+// Board image rotation (decoupled from ROT_OFFSET_DEG)
 // ---------------------------------------------------------
 function applyBoardImageTransform() {
   if (!board) return;
@@ -202,9 +205,7 @@ function ensureAudio() {
   if (!AUDIO.ctx) {
     try {
       AUDIO.ctx = new (window.AudioContext || window.webkitAudioContext)();
-    } catch (_) {
-      /* no WebAudio */
-    }
+    } catch (_) {}
   }
   if (AUDIO.ctx && AUDIO.ctx.state === "suspended") {
     AUDIO.ctx.resume();
@@ -212,9 +213,9 @@ function ensureAudio() {
 }
 function unmuteSfx() {
   [SFX.hit, SFX.bust, SFX.win].forEach((el) => {
-    if (el) el.muted = false; // allowed after a user gesture (click or Start)
+    if (el) el.muted = false;
   });
-  ensureAudio(); // also resume WebAudio on first gesture
+  ensureAudio();
 }
 function beep(freq = 880, dur = 0.08, type = "sine", gain = 0.08) {
   const ctx = AUDIO.ctx;
@@ -236,12 +237,10 @@ function playSfx(kind) {
       el.currentTime = 0;
       void el.play();
       return;
-    } catch (_) {
-      /* fall back */
-    }
+    } catch (_) {}
   }
   ensureAudio();
-  if (!AUDIO.ctx) return; // nothing we can do
+  if (!AUDIO.ctx) return;
   if (kind === "hit") {
     beep(880, 0.06, "square", 0.06);
   } else if (kind === "bust") {
@@ -256,20 +255,11 @@ function playSfx(kind) {
 // ---------------------------------------------
 // PLAYER CARD STATE HELPERS
 // ---------------------------------------------
-
-/**
- * Records the last hit for the CURRENT player only.
- * This value persists across turn changes.
- * It is overwritten only when THIS player throws again.
- */
 function recordLastHit(label) {
-  // Set the last hit label for the player whose turn it is
   const p = game.players[game.turn];
   p.lastHit = label;
 }
 
-// SIMPLE + DIRECT UI UPDATE
-// No render cycle, no abstraction, no guessing.
 function updateLastHitUI(playerIndex, label) {
   const el = document.getElementById(playerIndex === 0 ? "p1-last" : "p2-last");
   if (el) {
@@ -277,16 +267,12 @@ function updateLastHitUI(playerIndex, label) {
   }
 }
 
-// SIMPLE + DIRECT TARGET UPDATE
-// Updates the player card target immediately after a hit.
 function updateTargetUI(playerIndex) {
   const el = document.getElementById(
     playerIndex === 0 ? "p1-target" : "p2-target",
   );
   if (!el) return;
-
   const p = game.players[playerIndex];
-
   if (game.mode === "x01") {
     el.textContent = `Need: ${p.score}`;
   } else {
@@ -295,14 +281,11 @@ function updateTargetUI(playerIndex) {
   }
 }
 
-// SIMPLE + DIRECT THROWS TRACKER UPDATE
-// Renders: 🎯 (not yet thrown), ✅ (hit), ❌ (miss)
 function updateThrowsUI(playerIndex) {
   const el = document.getElementById(
     playerIndex === 0 ? "p1-throws" : "p2-throws",
   );
   if (!el) return;
-
   const p = game.players[playerIndex];
   const icons = [];
   for (let i = 0; i < 3; i++) {
@@ -418,11 +401,9 @@ function drawGuides(cxLocal, cyLocal, radius) {
   ctx.moveTo(cxLocal, cyLocal);
   ctx.lineTo(zx, zy);
   ctx.stroke();
-
   ctx.restore();
 }
 
-// --- Highlight the current ATW target (wedge or bull) ---
 function drawATWTargetHighlight(cxLocal, cyLocal, radius) {
   if (game.mode !== "around") return;
   if (!game.active) return;
@@ -431,7 +412,6 @@ function drawATWTargetHighlight(cxLocal, cyLocal, radius) {
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
   if (target === "bull") {
-    // Glow around the bull
     const rOuter = radius * RATIOS.bullOuter * 1.35;
     const rInner = 0;
     const g = ctx.createRadialGradient(
@@ -454,7 +434,6 @@ function drawATWTargetHighlight(cxLocal, cyLocal, radius) {
     ctx.arc(cxLocal, cyLocal, radius * RATIOS.bullOuter, 0, Math.PI * 2);
     ctx.stroke();
   } else {
-    // Highlight the wedge for the current number
     const i = SECTORS.indexOf(target);
     if (i >= 0) {
       const step = (Math.PI * 2) / 20;
@@ -464,7 +443,6 @@ function drawATWTargetHighlight(cxLocal, cyLocal, radius) {
         aStart - Math.PI / 2 + (ROT_OFFSET_DEG * Math.PI) / 180;
       const thetaEnd = aEnd - Math.PI / 2 + (ROT_OFFSET_DEG * Math.PI) / 180;
       const rOut = radius * RATIOS.outer * 1.01;
-      //this is the line to colour the sector wedge in ATW
       ctx.fillStyle = "rgba(180, 255, 0, 1)";
       ctx.strokeStyle = "rgba(255, 47, 47, 1)";
       ctx.lineWidth = 3;
@@ -478,6 +456,7 @@ function drawATWTargetHighlight(cxLocal, cyLocal, radius) {
   }
   ctx.restore();
 }
+
 function hookCalibrationPanel() {
   const rx = document.getElementById("cal-radius");
   const dx = document.getElementById("cal-dx");
@@ -488,11 +467,10 @@ function hookCalibrationPanel() {
   const imgRotVal = document.getElementById("cal-img-rot-val");
   const panel = document.getElementById("cal-panel");
   const btnCal = document.getElementById("btn-cal");
-  // --- Numeric calibration input lookups ---
   const imgScale = document.getElementById("cal-img-scale");
   const imgX = document.getElementById("cal-img-x");
   const imgY = document.getElementById("cal-img-y");
-  if (!panel || !btnCal) return; // require panel + button only
+  if (!panel || !btnCal) return;
   if (panel) {
     panel.classList.toggle("hidden", !SHOW_CAL_PANEL);
   }
@@ -520,13 +498,9 @@ function hookCalibrationPanel() {
   if (rot) rot.value = ROT_OFFSET_DEG;
   if (imgRot) imgRot.value = BOARD_IMG_ROT_DEG;
   if (tog) tog.checked = SHOW_GUIDES;
-  // --- Image calibration input initial value sync ---
   if (imgScale) imgScale.value = BOARD_IMG_SCALE.toFixed(3);
   if (imgX) imgX.value = BOARD_IMG_X;
   if (imgY) imgY.value = BOARD_IMG_Y;
-  if (panel && panel.classList.contains("hidden")) {
-    // no-op
-  }
   sync();
   if (rx) {
     rx.addEventListener("input", () => {
@@ -535,7 +509,6 @@ function hookCalibrationPanel() {
       saveCal();
     });
   }
-
   if (dx) {
     dx.addEventListener("input", () => {
       CENTER_X_FUDGE = parseInt(dx.value || "0", 10);
@@ -543,7 +516,6 @@ function hookCalibrationPanel() {
       saveCal();
     });
   }
-
   if (dy) {
     dy.addEventListener("input", () => {
       CENTER_Y_FUDGE = parseInt(dy.value || "0", 10);
@@ -554,7 +526,7 @@ function hookCalibrationPanel() {
   if (rot) {
     rot.addEventListener("input", () => {
       ROT_OFFSET_DEG = parseFloat(rot.value) || 0;
-      drawFade(); // keep overlay + highlights aligned
+      drawFade();
       sync();
       saveCal();
     });
@@ -567,7 +539,6 @@ function hookCalibrationPanel() {
       saveCal();
     });
   }
-  // --- Image calibration input listeners ---
   if (imgScale) {
     imgScale.addEventListener("input", () => {
       BOARD_IMG_SCALE = parseFloat(imgScale.value) || BOARD_IMG_SCALE;
@@ -635,7 +606,6 @@ function normaliseDetectionHit(hit) {
   if (!hit) return { ring: "miss", sector: null };
   const t = hit.type;
   if (t === "inner_bull" || t === "outer_bull") {
-    // Sector is unused for bulls in our scoring, but keep it sane
     return { ring: t, sector: 25 };
   }
   if (t === "miss" || hit.sector == null) {
@@ -651,7 +621,6 @@ async function detectDartFromCamera() {
     if (!data.ok) {
       throw new Error("detect endpoint returned !ok");
     }
-    // --- CAMERA: No impact detected ---
     if (!data.hit) {
       if (statusEl) statusEl.textContent = "No impact detected.";
       const throwingPlayer = game.turn;
@@ -664,7 +633,6 @@ async function detectDartFromCamera() {
 
     const { ring, sector } = normaliseDetectionHit(data.hit);
 
-    // --- CAMERA: Miss detected ---
     if (ring === "miss") {
       if (statusEl) statusEl.textContent = "Detected: Miss";
       const throwingPlayer = game.turn;
@@ -675,16 +643,13 @@ async function detectDartFromCamera() {
       return;
     }
 
-    // Auto-start game if not already active
     if (!game.active) {
       startGame();
     }
 
-    // Ensure audio is ready
     unmuteSfx();
     ensureAudio();
 
-    // Human‑readable label for this dart
     const label = ring.includes("bull")
       ? ring.replace("_", " ")
       : `${ring} ${sector}`;
@@ -693,25 +658,14 @@ async function detectDartFromCamera() {
       statusEl.textContent = `Detected: ${label}`;
     }
 
-    // Capture who is throwing BEFORE engine mutates turn
     const throwingPlayer = game.turn;
-
     recordLastHit(label);
     updateLastHitUI(throwingPlayer, label);
-
-    // Record this dart for the active turn
     game.players[throwingPlayer].turnThrows.push("hit");
     updateThrowsUI(throwingPlayer);
-
-    // Feed the detected hit into the engine
     applyHit(ring, sector);
-
-    // Update target for the player who actually threw
     updateTargetUI(throwingPlayer);
 
-    // Update target AFTER engine logic
-
-    // Optionally log this to the server as well
     logToServer({
       source: "camera",
       ring,
@@ -732,8 +686,8 @@ async function detectDartFromCamera() {
 // -------------------------------------------------------------------------------------------------
 class GameEngine {
   constructor(gameState) {
-    this.g = gameState; // keep HUD compatibility
-    this.mode = null; // will be { name, onStart, applyHit }
+    this.g = gameState;
+    this.mode = null;
   }
   setMode(name) {
     if (name === "around") this.mode = AroundMode;
@@ -748,7 +702,7 @@ class GameEngine {
     this.g.turn = 0;
     this.g.throwsLeft = 3;
     this.g.history = [];
-    this.g.winner = null; // reset winner
+    this.g.winner = null;
     this.g.players.forEach((p) => {
       p.done = false;
       p.idx = 0;
@@ -757,7 +711,6 @@ class GameEngine {
     });
     this.g.turnStartScore = this.g.players[0].score;
     this.mode.onStart(this);
-    // Prepare visuals and sounds
     drawFade();
     unmuteSfx();
     console.info("[Engine] start", {
@@ -770,7 +723,7 @@ class GameEngine {
     this.g.turn = 0;
     this.g.throwsLeft = 3;
     this.g.history = [];
-    this.g.winner = null; // reset winner
+    this.g.winner = null;
     this.g.players.forEach((p) => {
       p.done = false;
       p.idx = 0;
@@ -781,40 +734,26 @@ class GameEngine {
     console.info("[Engine] reset");
   }
   nextPlayer() {
-    const prevTurn = this.g.turn;
     this.g.turn = (this.g.turn + 1) % this.g.players.length;
-    this.g.throwsLeft = 3; // exactly three darts per turn
-    // Reset throw tracker for the new active player and update UI immediately
+    this.g.throwsLeft = 3;
     this.g.players[this.g.turn].turnThrows = [];
     updateThrowsUI(this.g.turn);
     this.g.turnStartScore = this.g.players[this.g.turn].score;
-    // Redraw overlay so ATW highlight updates on turn change
     drawFade();
-
-    // Immediately update the top-center turn badge on turn change
     try {
       const badge = document.getElementById("turn-badge");
       if (badge) badge.textContent = `Player ${this.g.turn + 1} to throw`;
     } catch (_) {}
-
-    // Player card DOM writes removed; cards are updated only in renderPlayers()
-
-    // Clear, explicit status for the new player
     try {
       const cur = this.g.players[this.g.turn];
       if (typeof statusEl !== "undefined" && statusEl) {
         if (this.g.mode === "around") {
-          statusEl.textContent = `Player ${
-            this.g.turn + 1
-          } — to hit: ${atwTargetText(cur)}`;
+          statusEl.textContent = `Player ${this.g.turn + 1} — to hit: ${atwTargetText(cur)}`;
         } else {
-          statusEl.textContent = `Player ${this.g.turn + 1} — need ${
-            cur.score
-          }`;
+          statusEl.textContent = `Player ${this.g.turn + 1} — need ${cur.score}`;
         }
       }
     } catch (_) {}
-    // Clear baseline so next player's first dart diffs against a clean board
     fetch("/reset-baseline", { method: "POST" }).catch(() => {});
     console.info("[Engine] nextPlayer", { turn: this.g.turn });
   }
@@ -851,32 +790,26 @@ class GameEngine {
     this.pushSnapshot();
     const result = this.mode.applyHit(this, { ring, sector });
 
-    // Provisional hit sound (may be overridden by bust/win below)
     playSfx("hit");
 
-    // Consume a dart unless the mode says otherwise
     if (!result || result.consumeThrow !== false) {
       this.g.throwsLeft -= 1;
     }
 
-    // If the mode reports a win, end the game immediately
     let ended = false;
     if (result && result.win) {
       this.end(this.g.turn, result.note || "win");
       ended = true;
     }
 
-    // Finalize sound according to outcome
     if (result && result.win) {
       playSfx("win");
     } else if (result && result.bust) {
       playSfx("bust");
     }
 
-    // Redraw overlay so ATW target highlight reflects any intra-turn advances
     drawFade();
 
-    // Otherwise, rotate turn at end of 3 darts
     if (!ended && this.g.throwsLeft <= 0) {
       this.nextPlayer();
     }
@@ -907,7 +840,7 @@ class GameEngine {
   }
 }
 
-// --- Around-the-World mode (explicit status + win flag) ---
+// --- Around-the-World mode ---
 const AroundMode = {
   name: "around",
   onStart(engine) {
@@ -953,21 +886,18 @@ const AroundMode = {
       const hitLabel = ring.includes("bull")
         ? ring.replace("_", " ")
         : `${ring} ${sector}`;
-      const afterZero = dartsLeftAfter <= 0; // this dart ends the turn
+      const afterZero = dartsLeftAfter <= 0;
       const nextPlayerNum = ((g.turn + 1) % g.players.length) + 1;
       if (win) {
-        const msg = `Hit: ${hitLabel} • advanced +${advance} • Winner: ${p.name} 🎯`;
-        statusEl.textContent = msg;
+        statusEl.textContent = `Hit: ${hitLabel} • advanced +${advance} • Winner: ${p.name} 🎯`;
       } else if (advance === 0) {
-        const msg = afterZero
+        statusEl.textContent = afterZero
           ? `Hit: ${hitLabel} • no advance • Turn complete. Player ${nextPlayerNum} is up!`
           : `Hit: ${hitLabel} • no advance • still to hit: ${nextTgt}`;
-        statusEl.textContent = msg;
       } else {
-        const msg = afterZero
+        statusEl.textContent = afterZero
           ? `Hit: ${hitLabel} • advanced +${advance} • Turn complete. Player ${nextPlayerNum} is up!`
           : `Hit: ${hitLabel} • advanced +${advance} • now to hit: ${nextTgt}`;
-        statusEl.textContent = msg;
       }
     }
 
@@ -975,7 +905,7 @@ const AroundMode = {
   },
 };
 
-// --- X01 mode (full scoring: bust + double-out) ---
+// --- X01 mode ---
 const X01Mode = {
   name: "x01",
   onStart(engine) {
@@ -983,13 +913,11 @@ const X01Mode = {
     g.players.forEach((p) => {
       p.score = g.x01Start;
       p.done = false;
-      p.idx = 0; // unused here but harmless
+      p.idx = 0;
     });
     g.turnStartScore = g.players[g.turn].score;
     if (typeof statusEl !== "undefined" && statusEl) {
-      statusEl.textContent = `Player ${g.turn + 1} — need ${
-        g.players[g.turn].score
-      }`;
+      statusEl.textContent = `Player ${g.turn + 1} — need ${g.players[g.turn].score}`;
     }
   },
   applyHit(engine, hit) {
@@ -997,22 +925,15 @@ const X01Mode = {
     const g = engine.g;
     const p = g.players[g.turn];
 
-    // Calculate score for this dart
     const delta = ringScore(ring, sector);
     const next = p.score - delta;
-
     const hitLabel = ring.includes("bull")
       ? ring.replace("_", " ")
       : `${ring} ${sector}`;
     const dartsLeftAfter = g.throwsLeft - 1;
 
-    // Bust conditions
-    // 1) Score would go below 0
-    // 2) Score would hit 0 WITHOUT finishing on a double when double-out is required
     if (next < 0 || (next === 0 && g.doubleOut && !isDouble(ring))) {
-      // Bust: revert to the score at start of the turn and end the turn immediately
       p.score = g.turnStartScore;
-      // Force end of turn after this dart: set to 1 so engine's auto-decrement hits 0
       g.throwsLeft = 1;
       if (typeof statusEl !== "undefined" && statusEl) {
         const nextPlayerNum = ((g.turn + 1) % g.players.length) + 1;
@@ -1025,38 +946,31 @@ const X01Mode = {
       return { bust: true };
     }
 
-    // Valid checkout
     if (next === 0) {
-      // If double-out isn't required, any checkout is fine; if required, must be a double
       if (!g.doubleOut || isDouble(ring)) {
         p.score = 0;
         p.done = true;
         if (typeof statusEl !== "undefined" && statusEl) {
-          const msg = `Hit: ${hitLabel} • Checkout! Winner: ${p.name} 🎯`;
-          statusEl.textContent = msg;
+          statusEl.textContent = `Hit: ${hitLabel} • Checkout! Winner: ${p.name} 🎯`;
         }
         return { win: true, note: "checkout" };
       }
-      // Double-out required but not satisfied would already be caught by bust branch above
     }
 
-    // Normal scoring (no bust, no win)
     p.score = next;
     if (typeof statusEl !== "undefined" && statusEl) {
       const nextPlayerNum = ((g.turn + 1) % g.players.length) + 1;
-      const msg =
+      statusEl.textContent =
         dartsLeftAfter <= 0
           ? `Hit: ${hitLabel} • need ${next} • Turn complete. Player ${nextPlayerNum} is up!`
           : `Hit: ${hitLabel} • need ${next}`;
-      statusEl.textContent = msg;
     }
 
-    // Inform the engine to consume the dart normally and continue
     return {};
   },
 };
 
-// ---- Helpers for x01 + ATW text ----
+// ---- Helpers ----
 function ringScore(ring, sector) {
   if (ring === "inner_bull") return 50;
   if (ring === "outer_bull") return 25;
@@ -1074,9 +988,8 @@ function atwTargetText(p) {
 }
 
 // -------------------------------------------------------------------------------------------------
-// UI glue below (unchanged HUD API, but routed through the engine)
+// UI glue
 // -------------------------------------------------------------------------------------------------
-
 function renderPlayers() {
   const host = document.getElementById("players");
   if (!host) return;
@@ -1091,9 +1004,7 @@ function renderPlayers() {
       d.textContent = `${p.name} • ${p.score}`;
     } else {
       const t = TARGETS[p.idx];
-      d.textContent = `${p.name} • ${
-        p.done ? "✓ finished" : "→ " + (t === "bull" ? "Bull" : t)
-      }`;
+      d.textContent = `${p.name} • ${p.done ? "✓ finished" : "→ " + (t === "bull" ? "Bull" : t)}`;
     }
     host.appendChild(d);
   });
@@ -1107,23 +1018,14 @@ function renderPlayers() {
     document.getElementById("hud-target").textContent = `To hit: ${tgt}`;
   }
 
-  // Winner / game-over banner
   if (!game.active && game.winner !== null) {
     const w = game.players[game.winner];
     if (statusEl) statusEl.textContent = `Winner: ${w.name} 🎯`;
   }
 
-  // Enable Undo only if we have a snapshot to revert
   const undoBtn = document.getElementById("btn-undo");
   if (undoBtn) undoBtn.disabled = game.history.length === 0;
 
-  // =====================================================
-  // PLAYER CARDS (Side HUD)
-  // Cards are PURELY state‑driven.
-  // They never show instructions or turn text.
-  // =====================================================
-
-  // --- Side HUD (left/right) wiring for projection ---
   const p1 = game.players[0];
   const p2 = game.players[1];
 
@@ -1131,15 +1033,11 @@ function renderPlayers() {
   const p2NameEl = document.getElementById("p2-name");
   const p1TargetEl = document.getElementById("p1-target");
   const p2TargetEl = document.getElementById("p2-target");
-  const p1ThrowsEl = document.getElementById("p1-throws");
-  const p2ThrowsEl = document.getElementById("p2-throws");
   const p1Card = document.getElementById("p1-card");
   const p2Card = document.getElementById("p2-card");
-  // New: lookup for last hit lines
   const p1LastEl = document.getElementById("p1-last");
   const p2LastEl = document.getElementById("p2-last");
 
-  // Helper to format the target text per mode
   const formatTarget = (player) => {
     if (game.mode === "x01") return `Need: ${player.score}`;
     const t = TARGETS[player.idx];
@@ -1151,9 +1049,6 @@ function renderPlayers() {
   if (p1TargetEl) p1TargetEl.textContent = formatTarget(p1);
   if (p2TargetEl) p2TargetEl.textContent = formatTarget(p2);
 
-  // --- PLAYER CARD: Persistent last hit ---
-  // This survives turn switches and only updates
-  // when THAT player throws again.
   if (p1LastEl) {
     p1LastEl.textContent = p1.lastHit
       ? `Last hit: ${p1.lastHit}`
@@ -1165,10 +1060,6 @@ function renderPlayers() {
       : "Last hit: —";
   }
 
-  // Show throws left for the active player; clear or dash for the other
-  // (Removed p1ThrowsEl/p2ThrowsEl textContent setting)
-
-  // Active vs inactive card states — always assign exactly one
   if (p1Card) {
     p1Card.classList.remove("active", "inactive");
     p1Card.classList.add(game.turn === 0 ? "active" : "inactive");
@@ -1178,7 +1069,6 @@ function renderPlayers() {
     p2Card.classList.add(game.turn === 1 ? "active" : "inactive");
   }
 
-  // Turn badge (top-center)
   const badge = document.getElementById("turn-badge");
   if (badge) {
     if (game.winner !== null) {
@@ -1207,9 +1097,7 @@ function startGame() {
   game.doubleOut = BOOT_DOUBLE_OUT;
   ENGINE.setMode(game.mode);
   ENGINE.start();
-  // Ensure initial target highlight is visible
   drawFade();
-  // Start-of-round prompt for clarity
   if (statusEl) {
     if (game.mode === "around") {
       statusEl.textContent = `Player 1 — to hit: 1`;
@@ -1252,15 +1140,12 @@ function handleClick(e) {
   const secIdx = sectorIndexFromAngle(angle);
   const sectorNum = SECTORS[secIdx];
 
-  // Auto-start the game on first click (before we log the dart)
   if (!game.active) {
     startGame();
   }
-  // Ensure SFX are unmuted on user gesture
   unmuteSfx();
   ensureAudio();
 
-  // Visuals
   drawFade();
   drawMarker(
     x,
@@ -1268,7 +1153,6 @@ function handleClick(e) {
     ring.includes("bull") ? ring.replace("_", " ") : `${ring} ${sectorNum}`,
   );
 
-  // Human‑readable label for this dart
   const hitLabel = ring.includes("bull")
     ? ring.replace("_", " ")
     : `${ring} ${sectorNum}`;
@@ -1277,19 +1161,12 @@ function handleClick(e) {
     statusEl.textContent = `Hit: ${hitLabel}`;
   }
 
-  // Capture who is throwing BEFORE engine mutates turn
   const throwingPlayer = game.turn;
-
   recordLastHit(hitLabel);
   updateLastHitUI(throwingPlayer, hitLabel);
-
-  // Record this dart for the active turn (any registered board hit counts as a hit)
   game.players[throwingPlayer].turnThrows.push("hit");
   updateThrowsUI(throwingPlayer);
-
   applyHit(ring, sectorNum);
-
-  // Update target for the player who actually threw
   updateTargetUI(throwingPlayer);
 
   console.log("CLICK", { x, y, ring, secIdx, sectorNum });
@@ -1300,7 +1177,6 @@ function handleClick(e) {
 window.addEventListener("keydown", (e) => {
   let changed = false;
   const stepPx = 1;
-  const stepRad = 0.005;
   switch (e.key) {
     case "ArrowLeft":
       CENTER_X_FUDGE -= stepPx;
@@ -1320,11 +1196,11 @@ window.addEventListener("keydown", (e) => {
       break;
     case "+":
     case "=":
-      BOARD_RADIUS_FUDGE += stepRad;
+      BOARD_RADIUS_FUDGE += 0.005;
       changed = true;
       break;
     case "-":
-      BOARD_RADIUS_FUDGE -= stepRad;
+      BOARD_RADIUS_FUDGE -= 0.005;
       changed = true;
       break;
     case "[":
@@ -1339,48 +1215,15 @@ window.addEventListener("keydown", (e) => {
   if (changed) {
     applyBoardImageTransform();
     drawFade();
-    statusEl.textContent = `Cal: R=${BOARD_RADIUS_FUDGE.toFixed(
-      3,
-    )}  dx=${CENTER_X_FUDGE}  dy=${CENTER_Y_FUDGE}  rot=${ROT_OFFSET_DEG.toFixed(
-      1,
-    )}°`;
+    statusEl.textContent = `Cal: R=${BOARD_RADIUS_FUDGE.toFixed(3)}  dx=${CENTER_X_FUDGE}  dy=${CENTER_Y_FUDGE}  rot=${ROT_OFFSET_DEG.toFixed(1)}°`;
     saveCal();
   }
 });
 
-window.addEventListener("resize", resizeOverlay);
-window.addEventListener("DOMContentLoaded", () => {
-  resizeOverlay();
-  hookCalibrationPanel();
-  drawFade();
-  initSfx();
-  applyBoardImageTransform();
-  const s = document.getElementById("btn-start");
-  const r = document.getElementById("btn-reset");
-  const u = document.getElementById("btn-undo");
-  const c = document.getElementById("btn-capture");
-  const d = document.getElementById("btn-detect");
-  if (s) s.addEventListener("click", startGame);
-  if (r) r.addEventListener("click", resetGame);
-  if (u) u.addEventListener("click", undo);
-  if (c)
-    c.addEventListener("click", () => {
-      captureBoardBefore();
-    });
-  if (d)
-    d.addEventListener("click", () => {
-      detectDartFromCamera();
-    });
-  ENGINE.setMode(game.mode); // reflect boot mode before Start
-  renderPlayers();
-  updateThrowsUI(0);
-  updateThrowsUI(1);
-});
 window.addEventListener("keydown", (e) => {
   if ((e.key === "c" || e.key === "C") && (e.ctrlKey || e.metaKey)) {
     const panel = document.getElementById("cal-panel");
     if (panel) {
-      SHOW_CAL_PANEL = !panel.classList.contains("hidden");
       SHOW_CAL_PANEL = !SHOW_CAL_PANEL;
       panel.classList.toggle("hidden", !SHOW_CAL_PANEL);
       saveCalUi(SHOW_CAL_PANEL);
@@ -1388,19 +1231,22 @@ window.addEventListener("keydown", (e) => {
     }
   }
 });
+
+window.addEventListener("resize", resizeOverlay);
 board.addEventListener("load", resizeOverlay);
 overlay.addEventListener("click", handleClick);
 
-// --- Legacy setLastHitText function fully removed ---
-
 // -------------------------------------------------------------------------------------------------
 // AUDIO TRIGGER POLLING
-// Polls /latest-hit every second to pick up hits fired by audio_trigger.py
 // -------------------------------------------------------------------------------------------------
 let _pollInterval = null;
 
 function startPolling() {
-  if (_pollInterval) return;
+  // Always clear any existing interval first — prevents duplicate pollers on page refresh
+  if (_pollInterval) {
+    clearInterval(_pollInterval);
+    _pollInterval = null;
+  }
   _pollInterval = setInterval(async () => {
     if (!game.active) return;
     try {
@@ -1438,6 +1284,38 @@ function startPolling() {
   }, 1000);
 }
 
+// -------------------------------------------------------------------------------------------------
+// SINGLE DOMContentLoaded — all init here
+// -------------------------------------------------------------------------------------------------
 window.addEventListener("DOMContentLoaded", () => {
+  resizeOverlay();
+  hookCalibrationPanel();
+  drawFade();
+  initSfx();
+  applyBoardImageTransform();
+
+  const s = document.getElementById("btn-start");
+  const r = document.getElementById("btn-reset");
+  const u = document.getElementById("btn-undo");
+  const c = document.getElementById("btn-capture");
+  const d = document.getElementById("btn-detect");
+  if (s) s.addEventListener("click", startGame);
+  if (r) r.addEventListener("click", resetGame);
+  if (u) u.addEventListener("click", undo);
+  if (c)
+    c.addEventListener("click", () => {
+      captureBoardBefore();
+    });
+  if (d)
+    d.addEventListener("click", () => {
+      detectDartFromCamera();
+    });
+
+  ENGINE.setMode(game.mode);
+  renderPlayers();
+  updateThrowsUI(0);
+  updateThrowsUI(1);
+
+  // Start polling — exactly once
   startPolling();
 });
