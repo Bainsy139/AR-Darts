@@ -192,8 +192,7 @@ def latest_hit():
     return jsonify({"ok": True, "hit": hit})
 
 
-if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=5050, debug=True)
+
 
 # ------------------------------
 # Audio arm endpoints
@@ -221,3 +220,6 @@ def disarm_audio():
     _audio_armed = False
     print("[ARM] Audio disarmed — turn complete.")
     return jsonify({"ok": True})
+
+if __name__ == '__main__':
+    app.run(host="0.0.0.0", port=5050, debug=True)
