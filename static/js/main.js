@@ -1006,7 +1006,8 @@ function showReadyButton() {
   const btn = document.createElement("button");
   btn.textContent = `Player ${game.turn + 1} — Ready to throw?`;
   btn.className = "btn-ready";
-  btn.addEventListener("click", async () => {
+  btn.addEventListener("click", async (e) => {
+    e.stopPropagation();
     btn.disabled = true;
     btn.textContent = "Setting up...";
     await fetch("/arm-audio", { method: "POST" }).catch(() => {});
