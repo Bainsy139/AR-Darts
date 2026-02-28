@@ -16,6 +16,11 @@ AFTER_PATH  = "after.jpg"
 _latest_hit = None
 
 # ------------------------------
+# Audio arm state
+# ------------------------------
+_audio_armed = False
+
+# ------------------------------
 # Camera — single warm instance
 # ------------------------------
 _cam_lock = threading.Lock()
@@ -31,7 +36,7 @@ def get_camera():
             main={"size": (1920, 1080), "format": "BGR888"},
             controls={
                 "ExposureTime": 32680,
-                "AnalogueGain": 16.0,
+                "AnalogueGain": 6.0,
                 "AwbEnable": False,
                 "ColourGains": (1.5, 1.5),
             }
@@ -186,18 +191,33 @@ def latest_hit():
     _latest_hit = None
     return jsonify({"ok": True, "hit": hit})
 
-@app.post('/reset-baseline')
-def reset_baseline():
-    """Delete before.jpg so next detection captures a clean baseline."""
-    try:
-        if os.path.exists(BEFORE_PATH):
-            os.remove(BEFORE_PATH)
-        print("[RESET] Baseline cleared for player change.")
-        return jsonify({"ok": True})
-    except Exception as e:
-        print(f"[ERROR] reset-baseline failed: {e}")
-        return jsonify({"ok": False, "error": str(e)}), 500
-
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=5050, debug=True, use_reloader=False)
+    app.run(host="0.0.0.0", port=5050, debug=True)
+
+# ------------------------------
+# Audio arm endpoints
+# ------------------------------
+
+@app.get('/audio-armed')
+def audio_armed():
+    """Polled by audio_trigger.py — returns whether mic should be listening."""
+    return jsonify({"armed": _audio_armed})
+
+
+@app.post('/arm-audio')
+def arm_audio():
+    """Called by JS when player presses Ready. Arms the mic for next turn."""
+    global _audio_armed
+    _audio_armed = True
+    print("[ARM] Audio armed — player ready.")
+    return jsonify({"ok": True})
+
+
+@app.post('/disarm-audio')
+def disarm_audio():
+    """Called by audio_trigger after 3 darts. Disarms the mic."""
+    global _audio_armed
+    _audio_armed = False
+    print("[ARM] Audio disarmed — turn complete.")
+    return jsonify({"ok": True})

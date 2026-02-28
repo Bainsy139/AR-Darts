@@ -76,6 +76,31 @@
         inset: 0;
         z-index: 2;
       }
+      .btn-ready {
+        background: #00cc66;
+        color: white;
+        border: none;
+        padding: 10px 24px;
+        font-size: 1rem;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: bold;
+        animation: pulse 1.2s infinite;
+      }
+      .btn-ready:disabled {
+        background: #555;
+        animation: none;
+        cursor: not-allowed;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.6;
+        }
+      }
     </style>
   </head>
   <body>

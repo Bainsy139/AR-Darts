@@ -765,6 +765,9 @@ class GameEngine {
       }
     } catch (_) {}
     fetch("/reset-baseline", { method: "POST" }).catch(() => {});
+    // Disarm mic — waits for Ready button before re-arming
+    fetch("/disarm-audio", { method: "POST" }).catch(() => {});
+    showReadyButton();
     console.info("[Engine] nextPlayer", { turn: this.g.turn });
   }
   pushSnapshot() {
@@ -996,7 +999,21 @@ function atwTargetText(p) {
   const t = TARGETS[p.idx];
   return t === "bull" ? "Bull" : String(t);
 }
-
+function showReadyButton() {
+  const badge = document.getElementById("turn-badge");
+  if (!badge) return;
+  badge.innerHTML = "";
+  const btn = document.createElement("button");
+  btn.textContent = `Player ${game.turn + 1} — Ready to throw?`;
+  btn.className = "btn-ready";
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    btn.textContent = "Setting up...";
+    await fetch("/arm-audio", { method: "POST" }).catch(() => {});
+    badge.textContent = `Player ${game.turn + 1} to throw`;
+  });
+  badge.appendChild(btn);
+}
 // -------------------------------------------------------------------------------------------------
 // UI glue
 // -------------------------------------------------------------------------------------------------
@@ -1084,9 +1101,9 @@ function renderPlayers() {
     if (game.winner !== null) {
       badge.textContent = `Winner: ${game.players[game.winner].name} 🎯`;
     } else if (game.active) {
-      badge.textContent = `Player ${game.turn + 1} to throw`;
-    } else {
-      badge.textContent = `Ready`;
+      if (!badge.querySelector(".btn-ready")) {
+        badge.textContent = `Player ${game.turn + 1} to throw`;
+      }
     }
   }
 }
@@ -1107,6 +1124,7 @@ function startGame() {
   game.doubleOut = BOOT_DOUBLE_OUT;
   ENGINE.setMode(game.mode);
   ENGINE.start();
+  fetch("/arm-audio", { method: "POST" }).catch(() => {});
   drawFade();
   if (statusEl) {
     if (game.mode === "around") {
