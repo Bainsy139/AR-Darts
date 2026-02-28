@@ -1153,6 +1153,8 @@ function undo() {
 }
 
 function handleClick(e) {
+  const badge = document.getElementById("turn-badge");
+  if (badge && badge.querySelector(".btn-ready")) return;
   const rect = overlay.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
