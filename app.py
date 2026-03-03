@@ -191,7 +191,16 @@ def latest_hit():
     _latest_hit = None
     return jsonify({"ok": True, "hit": hit})
 
-
+@app.post('/reset-baseline')
+def reset_baseline():
+    """Clear the before-frame so next detect captures a fresh baseline."""
+    try:
+        if os.path.exists(BEFORE_PATH):
+            os.remove(BEFORE_PATH)
+        print("[BASELINE] Reset — will capture fresh on next detect.")
+    except Exception as e:
+        print(f"[WARNING] reset-baseline failed: {e}")
+    return jsonify({"ok": True})
 
 
 # ------------------------------
@@ -222,4 +231,4 @@ def disarm_audio():
     return jsonify({"ok": True})
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=5050, debug=True, use_reloader=False)
+    app.run(host="0.0.0.0", port=5050, debug=False, threaded=True, use_reloader=False)
