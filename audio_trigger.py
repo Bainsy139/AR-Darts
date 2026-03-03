@@ -127,6 +127,9 @@ def _handle_spike():
             return
 
         ok, data = post(DETECT_ENDPOINT)
+        print(f"[SPIKE] Detect returned: ok={ok}, hit={data.get('hit') if data else None}")
+
+        
 
         if RETRY_ON_NO_IMPACT and ok and isinstance(data, dict):
             reason = data.get("reason") or (data.get("hit") or {}).get("reason")
