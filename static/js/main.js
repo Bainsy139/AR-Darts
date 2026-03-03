@@ -1000,20 +1000,16 @@ function atwTargetText(p) {
   return t === "bull" ? "Bull" : String(t);
 }
 function showReadyButton() {
-  const badge = document.getElementById("turn-badge");
-  if (!badge) return;
-  badge.innerHTML = "";
-  const btn = document.createElement("button");
-  btn.textContent = `Player ${game.turn + 1} — Ready to throw?`;
-  btn.className = "btn-ready";
-  btn.addEventListener("click", async (e) => {
-    e.stopPropagation();
+  const btn = document.getElementById("btn-ready");
+  if (!btn) return;
+  btn.style.display = "inline-block";
+  btn.disabled = false;
+  btn.textContent = `Player ${game.turn + 1} — Ready?`;
+  btn.onclick = async () => {
     btn.disabled = true;
-    btn.textContent = "Setting up...";
+    btn.style.display = "none";
     await fetch("/arm-audio", { method: "POST" }).catch(() => {});
-    badge.textContent = `Player ${game.turn + 1} to throw`;
-  });
-  badge.appendChild(btn);
+  };
 }
 // -------------------------------------------------------------------------------------------------
 // UI glue
@@ -1102,9 +1098,7 @@ function renderPlayers() {
     if (game.winner !== null) {
       badge.textContent = `Winner: ${game.players[game.winner].name} 🎯`;
     } else if (game.active) {
-      if (!badge.querySelector(".btn-ready")) {
-        badge.textContent = `Player ${game.turn + 1} to throw`;
-      }
+      badge.textContent = `Player ${game.turn + 1} to throw`;
     }
   }
 }
@@ -1154,7 +1148,6 @@ function undo() {
 
 function handleClick(e) {
   const badge = document.getElementById("turn-badge");
-  if (badge && badge.querySelector(".btn-ready")) return;
   const rect = overlay.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
