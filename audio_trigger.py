@@ -31,7 +31,7 @@ COOLDOWN_SEC       = 2.0
 SETTLE_SEC         = 0.30
 RETRY_ON_NO_IMPACT = True
 RETRY_DELAY_SEC    = 0.20
-DEBUG_RMS          = True
+DEBUG_RMS          = False
 MAX_BUSY_SEC       = 12.0
 DARTS_PER_TURN     = 3        # disarm after this many successful detections
 
@@ -100,7 +100,7 @@ def _poll_arm_state():
             armed = data.get("armed", False)
             if armed and not _armed.is_set():
                 print("[ARM] Armed — capturing fresh baseline, ready for player...")
-                threading.Thread(target=post, args=(CAPTURE_BEFORE_ENDPOINT,), kwargs={"timeout": 2}, daemon=True).start()
+                post(CAPTURE_BEFORE_ENDPOINT)
                 with _dart_count_lock:
                     _dart_count = 0
                 _busy.clear()
@@ -109,7 +109,7 @@ def _poll_arm_state():
             elif not armed and _armed.is_set():
                 _armed.clear()
                 print("[ARM] Disarmed — waiting for Ready button.")
-        time.sleep(1.0)
+        time.sleep(0.5)
 
 # ----------------------------
 # Spike handler
@@ -127,9 +127,6 @@ def _handle_spike():
             return
 
         ok, data = post(DETECT_ENDPOINT)
-        print(f"[SPIKE] Detect returned: ok={ok}, hit={data.get('hit') if data else None}")
-
-        
 
         if RETRY_ON_NO_IMPACT and ok and isinstance(data, dict):
             reason = data.get("reason") or (data.get("hit") or {}).get("reason")
@@ -220,12 +217,7 @@ def main():
 
         while True:
             try:
-                print("[DEBUG] before read")
-
                 data = stream.read(CHUNK, exception_on_overflow=False)
-
-                print("[DEBUG] after read")
-
                 if not _armed.is_set():
                     continue   # mic stays open but spikes are ignored when disarmed
                 rms = rms_from_bytes(data)
