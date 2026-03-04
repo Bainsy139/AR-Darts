@@ -213,7 +213,7 @@ def main():
             rate=SAMPLE_RATE,
             input=True,
             input_device_index=AUDIO_DEVICE_INDEX,
-            frames_per_buffer=CHUNK,
+            frames_per_buffer=CHUNK * 8,
         )
         print("[AUDIO] Mic stream open.")
         print("[AUDIO] Waiting for game to arm via Ready button...")
