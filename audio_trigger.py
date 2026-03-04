@@ -213,14 +213,19 @@ def main():
             rate=SAMPLE_RATE,
             input=True,
             input_device_index=AUDIO_DEVICE_INDEX,
-            frames_per_buffer=CHUNK * 8,
+            frames_per_buffer=CHUNK,
         )
         print("[AUDIO] Mic stream open.")
         print("[AUDIO] Waiting for game to arm via Ready button...")
 
         while True:
             try:
+                print("[DEBUG] before read")
+
                 data = stream.read(CHUNK, exception_on_overflow=False)
+
+                print("[DEBUG] after read")
+
                 if not _armed.is_set():
                     continue   # mic stays open but spikes are ignored when disarmed
                 rms = rms_from_bytes(data)
