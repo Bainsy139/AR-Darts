@@ -100,7 +100,7 @@ def _poll_arm_state():
             armed = data.get("armed", False)
             if armed and not _armed.is_set():
                 print("[ARM] Armed — capturing fresh baseline, ready for player...")
-                post(CAPTURE_BEFORE_ENDPOINT, timeout=2)
+                threading.Thread(target=post, args=(CAPTURE_BEFORE_ENDPOINT,), kwargs={"timeout": 2}, daemon=True).start()
                 with _dart_count_lock:
                     _dart_count = 0
                 _busy.clear()
