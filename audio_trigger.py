@@ -109,7 +109,7 @@ def _poll_arm_state():
             elif not armed and _armed.is_set():
                 _armed.clear()
                 print("[ARM] Disarmed — waiting for Ready button.")
-        time.sleep(0.5)
+        time.sleep(1.0)
 
 # ----------------------------
 # Spike handler
