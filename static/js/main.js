@@ -1119,7 +1119,6 @@ function startGame() {
   game.doubleOut = BOOT_DOUBLE_OUT;
   ENGINE.setMode(game.mode);
   ENGINE.start();
-  fetch("/arm-audio", { method: "POST" }).catch(() => {});
   drawFade();
   if (statusEl) {
     if (game.mode === "around") {
@@ -1132,6 +1131,7 @@ function startGame() {
   updateThrowsUI(0);
   updateThrowsUI(1);
   applyBoardImageTransform();
+  showReadyButton();
 }
 function nextPlayer() {
   ENGINE.nextPlayer();
