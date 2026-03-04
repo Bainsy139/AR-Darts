@@ -31,7 +31,7 @@ COOLDOWN_SEC       = 2.0
 SETTLE_SEC         = 0.30
 RETRY_ON_NO_IMPACT = True
 RETRY_DELAY_SEC    = 0.20
-DEBUG_RMS          = False
+DEBUG_RMS          = True
 MAX_BUSY_SEC       = 12.0
 DARTS_PER_TURN     = 3        # disarm after this many successful detections
 
